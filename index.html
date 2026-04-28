@@ -20,23 +20,20 @@
         #signature-pad { touch-action: none; cursor: crosshair; width: 100%; height: 200px; }
         
         /* Container do PDF para MVP Mobile */
-        .pdf-viewport {
-            width: 100%;
-            background-color: #e2e8f0;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
-            position: relative;
-        }
+.pdf-viewport {
+    width: 100%;
+    min-height: 300px; /* Garante que haja espaço mesmo antes de carregar */
+    background-color: #ffffff;
+    border: 1px solid #ddd;
+    overflow-x: auto; /* Permite rolar para o lado se o ajuste falhar */
+    display: flex;
+    justify-content: center;
+}
 
-        #pdf-canvas {
-            display: block;
-            margin: 0 auto;
-            max-width: 100%;
-            height: auto;
-            touch-action: auto; /* Permite scroll nativo */
-            cursor: pointer;
-        }
+#pdf-canvas {
+    max-width: 100%;
+    height: auto !important;
+}
 
         .step-badge { @apply bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase; }
     </style>
@@ -112,20 +109,50 @@
     document.getElementById('clear-btn').addEventListener('click', () => signaturePad.clear());
 
     // --- 2. CARREGAMENTO E RENDERIZAÇÃO ---
-    document.getElementById('pdf-input').addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+// Substitua o evento de mudança do pdf-input por este:
+document.getElementById('pdf-input').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
 
-        document.getElementById('file-name').textContent = file.name;
-        pdfBytes = await file.arrayBuffer();
+    document.getElementById('file-name').textContent = file.name;
+    pdfBytes = await file.arrayBuffer();
 
+    try {
         const loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
         const pdf = await loadingTask.promise;
         pdfRenderedPage = await pdf.getPage(1);
 
-        renderPDFPreview();
+        const previewCanvas = document.getElementById('pdf-canvas');
+        const context = previewCanvas.getContext('2d');
+        
+        // CÁLCULO DE ESCALA RESPONSIVA
+        // Isso faz com que o PDF caiba exatamente na largura da sua tela
+        const containerWidth = document.querySelector('.pdf-viewport')?.clientWidth || window.innerWidth - 40;
+        const unscaledViewport = pdfRenderedPage.getViewport({ scale: 1 });
+        currentScale = containerWidth / unscaledViewport.width;
+
+        const viewport = pdfRenderedPage.getViewport({ scale: currentScale });
+        previewCanvas.width = viewport.width;
+        previewCanvas.height = viewport.height;
+
+        // Limpa o canvas antes de renderizar
+        context.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+
+        await pdfRenderedPage.render({
+            canvasContext: context,
+            viewport: viewport
+        }).promise;
+
         document.getElementById('preview-section').classList.remove('hidden');
-    });
+        
+        // Garante que o usuário veja o documento após o upload
+        previewCanvas.scrollIntoView({ behavior: 'smooth' });
+
+    } catch (err) {
+        console.error("Erro ao carregar PDF:", err);
+        alert("Não foi possível ler este PDF. Tente um arquivo menor ou mais simples.");
+    }
+});
 
     async function renderPDFPreview() {
         const canvas = document.getElementById('pdf-canvas');
