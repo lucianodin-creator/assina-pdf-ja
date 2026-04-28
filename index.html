@@ -92,7 +92,7 @@
 
 <script>
     // Configuração do Worker do PDF.js (Obrigatório para renderizar o PDF)
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cloudflare.com';
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cloudflare.com';
 
     const { PDFDocument } = PDFLib;
     let pdfDoc = null;
@@ -152,33 +152,50 @@
         previewCanvas.scrollIntoView({ behavior: 'smooth' });
     });
 
-    // 3. Captura o clique na prévia (com o PDF visível ao fundo)
-    document.getElementById('pdf-canvas').addEventListener('click', function(e) {
-        const rect = this.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+    // 3. Captura o clique ou toque na prévia
+    const handlePointer = function(e) {
+        if (!pdfRenderedPage) return;
 
-        // Precisamos converter a escala do que vemos no canvas para os "pontos" reais do PDF
+        const rect = this.getBoundingClientRect();
+        // Trata clique do mouse ou toque do dedo
+        const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+        const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+        
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
+
         const pdfViewport = pdfRenderedPage.getViewport({ scale: 1 });
         const scaleX = pdfViewport.width / rect.width;
         const scaleY = pdfViewport.height / rect.height;
 
         signaturePos = {
             x: x * scaleX,
-            y: pdfViewport.height - (y * scaleY) // Inverte o eixo Y para o padrão PDFLib
+            y: pdfViewport.height - (y * scaleY)
         };
 
-        // Feedback Visual: Desenha um retângulo semi-transparente sobre o PDF
+        // Redesenha a página para limpar marcações anteriores
         const ctx = this.getContext('2d');
-        // Opcional: redesenhar a página para limpar marcações anteriores antes de desenhar a nova
-        // Para simplicidade, apenas desenhamos o marcador:
-        ctx.strokeStyle = "#1e293b";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(x - 50, y - 25, 100, 50); // Desenha na escala da tela
+        const containerWidth = document.getElementById('preview-section').offsetWidth - 40;
+        const viewport = pdfRenderedPage.getViewport({ scale: containerWidth / pdfViewport.width });
+        
+        pdfRenderedPage.render({ canvasContext: ctx, viewport: viewport }).promise.then(() => {
+            // Desenha o marcador visual (retângulo azul de feedback)
+            ctx.strokeStyle = "#3b82f6";
+            ctx.lineWidth = 3;
+            ctx.setLineDash([5, 5]); // Linha tracejada para parecer uma área de colagem
+            ctx.strokeRect(x - 60, y - 30, 120, 60);
+        });
 
         document.getElementById('download-btn').disabled = false;
-        alert("Local da assinatura definido!");
-    });
+    };
+
+    const previewCanvas = document.getElementById('pdf-canvas');
+    previewCanvas.addEventListener('mousedown', handlePointer);
+    previewCanvas.addEventListener('touchstart', (e) => {
+        e.preventDefault(); // Impede o scroll ao tentar marcar o local
+        handlePointer.call(previewCanvas, e);
+    }, { passive: false });
+
 
     // 4. Geração do PDF Final
     document.getElementById('download-btn').addEventListener('click', async () => {
