@@ -12,7 +12,12 @@
     <style>
         :root { --primary: #0f172a; --accent: #3b82f6; }
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
-        .pdf-container { position: relative; overflow: auto; background: #cbd5e1; border-radius: 8px; min-height: 400px; }
+
+#pad-container { 
+    display: none; 
+    flex-direction: column; 
+    height: 100%; /* Ocupa todo o modal */
+}
         #pdf-canvas { display: block; margin: 0 auto; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
         
         /* Assinatura Flutuante */
@@ -39,8 +44,25 @@
         .sig-controls button { font-size: 10px; padding: 2px 6px; border-radius: 3px; background: #f1f5f9; }
 
         /* Modal de Assinatura */
-        #sig-modal { display: none; position: fixed; inset: 0; background: white; z-index: 100; flex-direction: column; }
-        #signature-pad { width: 100%; height: 100%; background: #fdfdfd; cursor: crosshair; }
+/* Modal de Assinatura Corrigido */
+#sig-modal { 
+    display: none; 
+    position: fixed; 
+    inset: 0; 
+    background: white; 
+    z-index: 100; 
+    flex-direction: column; 
+    height: 100%; /* Força altura total */
+    width: 100%;
+}
+
+#signature-pad { 
+    flex: 1; /* Faz o canvas ocupar todo o espaço acima dos botões */
+    width: 100%; 
+    background: #fdfdfd; 
+    cursor: crosshair;
+    border-bottom: 1px solid #e2e8f0;
+}
 
 #pdf-wrapper {
     position: relative;
@@ -53,6 +75,14 @@
     background: rgba(59, 130, 246, 0.1); /* Fundo leve para facilitar visualização no mobile */
 }
  
+/* Garante que os botões fiquem sempre visíveis embaixo */
+.modal-footer {
+    padding: 1rem;
+    display: flex;
+    gap: 0.5rem;
+    background: #f8fafc;
+    height: 80px; /* Altura fixa para os botões */
+}
 
    </style>
 </head>
@@ -76,9 +106,15 @@
             
             <input type="file" id="pdf-input" accept="application/pdf" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 uppercase tracking-widest"/>
 
-            <div class="pdf-container" id="pdf-wrapper">
-                <canvas id="pdf-canvas"></canvas>
-                </div>
+<div id="pad-container">
+    <canvas id="signature-pad"></canvas>
+    <div class="modal-footer">
+        <button onclick="closeSigModal()" class="flex-1 py-3 bg-white text-slate-600 rounded-lg font-bold border border-slate-200">Cancelar</button>
+        <button onclick="sigPad.clear()" class="flex-1 py-3 bg-white text-red-500 rounded-lg font-bold border border-slate-200">Limpar</button>
+        <button onclick="confirmSignature()" class="flex-1 py-3 bg-blue-600 text-white rounded-lg font-bold">Confirmar</button>
+    </div>
+</div>
+
         </section>
 
         <section class="text-center py-4">
@@ -152,14 +188,21 @@
             document.getElementById('pad-container').classList.add('hidden');
         }
 
-        function showPad() {
-            document.getElementById('orientation-msg').classList.add('hidden');
-            document.getElementById('pad-container').classList.remove('hidden');
-            // Ajusta tamanho do canvas
-            sigCanvas.width = sigCanvas.offsetWidth;
-            sigCanvas.height = sigCanvas.offsetHeight;
-            sigPad.clear();
-        }
+function showPad() {
+    document.getElementById('orientation-msg').classList.add('hidden');
+    const container = document.getElementById('pad-container');
+    container.style.display = 'flex'; // Mostra como flexbox
+
+    // Pequeno delay para garantir que o navegador calculou o tamanho do flex:1
+    setTimeout(() => {
+        const ratio = Math.max(window.devicePixelRatio || 1, 1);
+        sigCanvas.width = sigCanvas.offsetWidth * ratio;
+        sigCanvas.height = sigCanvas.offsetHeight * ratio;
+        sigCanvas.getContext("2d").scale(ratio, ratio);
+        sigPad.clear(); // Limpa para resetar a escala interna do SignaturePad
+    }, 50);
+}
+
 
         function closeSigModal() { modal.style.display = 'none'; }
 
