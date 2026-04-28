@@ -61,34 +61,42 @@
         .sig-controls button { font-size: 10px; font-weight: bold; padding: 4px 8px; border-radius: 4px; background: #f1f5f9; color: var(--primary); }
 
         /* Modal de Assinatura */
-        #sig-modal {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: white;
-            z-index: 100;
-            flex-direction: column;
-            height: 100%;
-            width: 100%;
-        }
+#sig-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: white;
+    z-index: 100;
+    flex-direction: column;
+    height: 100dvh; /* Altura dinâmica para mobile */
+    width: 100vw;
+    overflow: hidden; /* Impede qualquer rolagem */
+}
 
-        #pad-container { flex: 1; display: flex; flex-direction: column; height: 100%; }
+#pad-container {
+    flex: 1;
+    display: none; /* Começa escondido */
+    flex-direction: column;
+    height: 100%;
+}
 
-        #signature-pad {
-            flex: 1;
-            width: 100%;
-            background: #fdfdfd;
-            cursor: crosshair;
-            border-bottom: 1px solid #e2e8f0;
-        }
 
-        .modal-footer {
-            padding: 1rem;
-            display: flex;
-            gap: 0.5rem;
-            background: #f8fafc;
-            height: 85px;
-        }
+#signature-pad {
+    flex: 1; /* Ocupa todo o espaço entre o topo e os botões */
+    width: 100%;
+    touch-action: none;
+    background: #fafafa;
+}
+
+.modal-footer {
+    display: flex;
+    gap: 10px;
+    padding: 15px;
+    background: white;
+    border-top: 1px solid #eee;
+    padding-bottom: env(safe-area-inset-bottom); /* Suporte para iPhone/Android modernos */
+}
+
     </style>
 </head>
 <body>
@@ -190,20 +198,25 @@
             document.getElementById('pad-container').classList.add('hidden');
         }
 
-        function showPad() {
-            document.getElementById('orientation-msg').classList.add('hidden');
-            const container = document.getElementById('pad-container');
-            container.classList.remove('hidden');
-            container.style.display = 'flex';
+function showPad() {
+    // 1. Esconde a mensagem de orientação completamente
+    document.getElementById('orientation-msg').style.display = 'none';
+    
+    // 2. Mostra o container do pad como flex
+    const container = document.getElementById('pad-container');
+    container.style.display = 'flex';
+    container.classList.remove('hidden');
 
-            setTimeout(() => {
-                const ratio = Math.max(window.devicePixelRatio || 1, 1);
-                sigCanvas.width = sigCanvas.offsetWidth * ratio;
-                sigCanvas.height = sigCanvas.offsetHeight * ratio;
-                sigCanvas.getContext("2d").scale(ratio, ratio);
-                sigPad.clear();
-            }, 100);
-        }
+    // 3. Ajusta o tamanho do canvas ao novo espaço disponível
+    setTimeout(() => {
+        const ratio = Math.max(window.devicePixelRatio || 1, 1);
+        // Pega a largura e altura exatas que o CSS flex:1 reservou
+        sigCanvas.width = sigCanvas.offsetWidth * ratio;
+        sigCanvas.height = sigCanvas.offsetHeight * ratio;
+        sigCanvas.getContext("2d").scale(ratio, ratio);
+        sigPad.clear();
+    }, 150); // Delay leve para o layout assentar
+}
 
         function closeSigModal() { modal.style.display = 'none'; }
 
