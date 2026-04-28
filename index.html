@@ -16,17 +16,16 @@
         /* Estilo da Barra Superior */
         header { z-index: 50; position: sticky; top: 0; }
 
-        /* Container do PDF */
-        .pdf-area {
-            width: 100%;
-            background: #cbd5e1;
-            padding: 20px 0;
-            display: flex;
-            justify-content: center;
-            min-height: 400px;
-            overflow: auto;
-            border-radius: 12px;
-        }
+/* Container do PDF Corrigido */
+.pdf-container {
+    position: relative;
+    overflow: auto;
+    /* MUDANÇA: Fundo branco para visual profissional */
+    background: #ffffff; 
+    border-radius: 8px;
+    min-height: 400px;
+    padding: 10px; /* Pequeno espaçamento para não colar na borda */
+}
 
         #pdf-wrapper {
             position: relative;
@@ -34,7 +33,12 @@
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
         }
 
-        #pdf-canvas { display: block; background: white; }
+#pdf-canvas {
+    display: block;
+    margin: 0 auto;
+    /* MUDANÇA: Sombra mais suave para destacar o papel branco no fundo branco */
+    box-shadow: 0 4px 12px -1px rgba(0, 0, 0, 0.08); 
+}
 
         /* Assinatura Flutuante */
         .draggable-sig {
