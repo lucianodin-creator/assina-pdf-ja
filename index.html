@@ -4,238 +4,138 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Assinador PDF MVP</title>
-    
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-    
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; color: #1e293b; }
-        .bg-navy { background-color: #1e293b; }
-        
-        /* Área de Assinatura */
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; }
         #signature-pad { touch-action: none; cursor: crosshair; width: 100%; height: 200px; }
-        
-        /* Container do PDF para MVP Mobile */
-.pdf-viewport {
-    width: 100%;
-    min-height: 300px; /* Garante que haja espaço mesmo antes de carregar */
-    background-color: #ffffff;
-    border: 1px solid #ddd;
-    overflow-x: auto; /* Permite rolar para o lado se o ajuste falhar */
-    display: flex;
-    justify-content: center;
-}
-
-#pdf-canvas {
-    max-width: 100%;
-    height: auto !important;
-}
-
-        .step-badge { @apply bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase; }
+        .pdf-viewport { width: 100%; background-color: #e2e8f0; border-radius: 12px; overflow: hidden; position: relative; display: flex; justify-content: center; }
+        #pdf-canvas { display: block; max-width: 100%; height: auto; touch-action: auto; }
     </style>
 </head>
 <body class="pb-10">
 
-    <header class="bg-navy p-5 text-white text-center shadow-md">
-        <h1 class="text-lg font-bold">Assinador Digital Mobile</h1>
-        <p class="text-xs opacity-70">Privacidade total: processado no seu aparelho</p>
-    </header>
-
     <main class="max-w-md mx-auto px-4 mt-6 space-y-6">
-
         <section class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-            <span class="step-badge">Passo 1</span>
-            <h2 class="text-md font-bold mt-2 mb-3">Subir PDF</h2>
-            <label class="flex flex-col items-center justify-center w-full p-4 border-2 border-dashed border-slate-300 rounded-xl cursor-pointer hover:bg-slate-50 transition">
-                <p class="text-sm text-slate-500 text-center" id="file-name">Toque para selecionar</p>
-                <input type="file" id="pdf-input" accept="application/pdf" class="hidden" />
-            </label>
+            <h2 class="text-md font-bold mb-3">1. Selecione o PDF</h2>
+            <input type="file" id="pdf-input" accept="application/pdf" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
         </section>
 
         <section class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-            <span class="step-badge">Passo 2</span>
-            <h2 class="text-md font-bold mt-2 mb-3">Desenhe sua Assinatura</h2>
+            <h2 class="text-md font-bold mb-3">2. Desenhe sua Assinatura</h2>
             <div class="border border-slate-200 rounded-lg bg-slate-50">
                 <canvas id="signature-pad"></canvas>
             </div>
-            <button id="clear-btn" class="w-full mt-2 text-xs font-bold text-red-500 py-2 uppercase tracking-wider">Limpar</button>
+            <button id="clear-btn" class="w-full mt-2 text-xs font-bold text-red-500 py-2 uppercase">Limpar</button>
         </section>
 
         <section id="preview-section" class="hidden bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-            <div class="text-center">
-                <span class="step-badge">Passo 3</span>
-                <h2 class="text-md font-bold mt-2">Local da Assinatura</h2>
-                <p class="text-[11px] text-slate-500">Toque no documento onde a assinatura deve ficar</p>
-            </div>
-
+            <h2 class="text-md font-bold text-center">3. Toque no local para assinar</h2>
             <div class="pdf-viewport">
                 <canvas id="pdf-canvas"></canvas>
             </div>
-
-            <button id="download-btn" class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg disabled:opacity-30 disabled:grayscale transition-all transform active:scale-95" disabled>
+            <button id="download-btn" class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg disabled:opacity-30" disabled>
                 Finalizar e Baixar PDF
             </button>
         </section>
-
     </main>
 
 <script>
-    // Configuração PDF.js
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
     const { PDFDocument } = PDFLib;
-    let pdfBytes = null;
-    let signaturePos = null;
-    let pdfRenderedPage = null;
-    let currentScale = 1.0;
+    let pdfBytes = null, signaturePos = null, pdfRenderedPage = null, currentScale = 1.0;
 
-    // --- 1. CONFIGURAÇÃO DO PAD DE ASSINATURA ---
+    // --- Pad de Assinatura ---
     const sigCanvas = document.getElementById('signature-pad');
-    const signaturePad = new SignaturePad(sigCanvas, { backgroundColor: 'rgba(255, 255, 255, 0)' });
-
-    function initSignatureCanvas() {
+    const signaturePad = new SignaturePad(sigCanvas);
+    function resizeSig() {
         const ratio = Math.max(window.devicePixelRatio || 1, 1);
         sigCanvas.width = sigCanvas.offsetWidth * ratio;
         sigCanvas.height = sigCanvas.offsetHeight * ratio;
         sigCanvas.getContext("2d").scale(ratio, ratio);
         signaturePad.clear();
     }
-    window.addEventListener("resize", initSignatureCanvas);
-    initSignatureCanvas();
+    window.addEventListener("resize", resizeSig);
+    resizeSig();
     document.getElementById('clear-btn').addEventListener('click', () => signaturePad.clear());
 
-    // --- 2. CARREGAMENTO E RENDERIZAÇÃO ---
-// Substitua o evento de mudança do pdf-input por este:
-document.getElementById('pdf-input').addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    document.getElementById('file-name').textContent = file.name;
-    pdfBytes = await file.arrayBuffer();
-
-    try {
-        const loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
-        const pdf = await loadingTask.promise;
+    // --- PDF Render ---
+    document.getElementById('pdf-input').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        pdfBytes = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
         pdfRenderedPage = await pdf.getPage(1);
-
-        const previewCanvas = document.getElementById('pdf-canvas');
-        const context = previewCanvas.getContext('2d');
-        
-        // CÁLCULO DE ESCALA RESPONSIVA
-        // Isso faz com que o PDF caiba exatamente na largura da sua tela
-        const containerWidth = document.querySelector('.pdf-viewport')?.clientWidth || window.innerWidth - 40;
-        const unscaledViewport = pdfRenderedPage.getViewport({ scale: 1 });
-        currentScale = containerWidth / unscaledViewport.width;
-
-        const viewport = pdfRenderedPage.getViewport({ scale: currentScale });
-        previewCanvas.width = viewport.width;
-        previewCanvas.height = viewport.height;
-
-        // Limpa o canvas antes de renderizar
-        context.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-
-        await pdfRenderedPage.render({
-            canvasContext: context,
-            viewport: viewport
-        }).promise;
-
+        renderPreview();
         document.getElementById('preview-section').classList.remove('hidden');
-        
-        // Garante que o usuário veja o documento após o upload
-        previewCanvas.scrollIntoView({ behavior: 'smooth' });
+    });
 
-    } catch (err) {
-        console.error("Erro ao carregar PDF:", err);
-        alert("Não foi possível ler este PDF. Tente um arquivo menor ou mais simples.");
-    }
-});
-
-    async function renderPDFPreview() {
+    async function renderPreview(markX = null, markY = null) {
         const canvas = document.getElementById('pdf-canvas');
-        const context = canvas.getContext('2d');
-        
-        // Ajusta escala para caber na largura do celular
+        const ctx = canvas.getContext('2d');
         const containerWidth = canvas.parentElement.clientWidth;
         const unscaledViewport = pdfRenderedPage.getViewport({ scale: 1 });
         currentScale = containerWidth / unscaledViewport.width;
-
         const viewport = pdfRenderedPage.getViewport({ scale: currentScale });
+
         canvas.width = viewport.width;
         canvas.height = viewport.height;
 
-        await pdfRenderedPage.render({ canvasContext: context, viewport: viewport }).promise;
+        await pdfRenderedPage.render({ canvasContext: ctx, viewport: viewport }).promise;
+
+        // Se houver uma marcação, desenha a assinatura real (ou um placeholder) no preview
+        if (markX && markY) {
+            if (!signaturePad.isEmpty()) {
+                const img = new Image();
+                img.src = signaturePad.toDataURL();
+                img.onload = () => {
+                    ctx.drawImage(img, markX - 50, markY - 25, 100, 50);
+                    // Borda de marcação
+                    ctx.strokeStyle = "#2563eb";
+                    ctx.setLineDash([5, 5]);
+                    ctx.strokeRect(markX - 50, markY - 25, 100, 50);
+                };
+            }
+        }
     }
 
-    // --- 3. LOGICA DE TOQUE (MVP: CLIQUE vs SCROLL) ---
-    let startY = 0;
+    // --- Eventos de Toque ---
     const canvasEl = document.getElementById('pdf-canvas');
-
+    let startY = 0;
     canvasEl.addEventListener('touchstart', (e) => { startY = e.touches[0].clientY; }, { passive: true });
-
     canvasEl.addEventListener('touchend', (e) => {
-        const endY = e.changedTouches[0].clientY;
-        // Se moveu mais de 10px, o usuário estava dando scroll, não assinando
-        if (Math.abs(startY - endY) < 10) {
-            handleMark(e.changedTouches[0]);
+        if (Math.abs(startY - e.changedTouches[0].clientY) < 10) {
+            handlePoint(e.changedTouches[0]);
         }
     });
+    canvasEl.addEventListener('mousedown', (e) => handlePoint(e));
 
-    canvasEl.addEventListener('mousedown', (e) => handleMark(e));
-
-    async function handleMark(e) {
+    function handlePoint(e) {
+        if (signaturePad.isEmpty()) return alert("Assine no Passo 2 primeiro!");
         const rect = canvasEl.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
 
-        // Salva posição em coordenadas reais do PDF (escala 1:1)
-        const pdfViewport = pdfRenderedPage.getViewport({ scale: 1 });
-        signaturePos = {
-            x: x / currentScale,
-            y: pdfViewport.height - (y / currentScale)
-        };
-
-        // Feedback Visual
-        await renderPDFPreview();
-        const ctx = canvasEl.getContext('2d');
-        ctx.strokeStyle = "#2563eb";
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 5]);
-        ctx.strokeRect(x - 50, y - 25, 100, 50); // Mostra onde vai ficar
-
+        signaturePos = { x: x / currentScale, y: (pdfRenderedPage.getViewport({ scale: 1 }).height) - (y / currentScale) };
+        renderPreview(x, y);
         document.getElementById('download-btn').disabled = false;
     }
 
-    // --- 4. DOWNLOAD ---
+    // --- Download ---
     document.getElementById('download-btn').addEventListener('click', async () => {
-        if (signaturePad.isEmpty()) return alert("Desenhe sua assinatura primeiro!");
-
-        try {
-            const finalDoc = await PDFDocument.load(pdfBytes);
-            const sigImage = await finalDoc.embedPng(signaturePad.toDataURL());
-            const page = finalDoc.getPages()[0];
-
-            page.drawImage(sigImage, {
-                x: signaturePos.x - 50,
-                y: signaturePos.y - 25,
-                width: 100,
-                height: 50,
-            });
-
-            const pdfData = await finalDoc.save();
-            const blob = new Blob([pdfData], { type: 'application/pdf' });
-            const url = URL.createObjectURL(blob);
-            
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = "documento-assinado.pdf";
-            link.click();
-        } catch (err) {
-            alert("Erro ao processar PDF.");
-        }
+        const finalDoc = await PDFDocument.load(pdfBytes);
+        const sigImage = await finalDoc.embedPng(signaturePad.toDataURL());
+        const page = finalDoc.getPages()[0];
+        page.drawImage(sigImage, { x: signaturePos.x - 50, y: signaturePos.y - 25, width: 100, height: 50 });
+        const pdfData = await finalDoc.save();
+        const blob = new Blob([pdfData], { type: 'application/pdf' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = "assinado.pdf";
+        link.click();
     });
 </script>
 </body>
