@@ -26,10 +26,11 @@
 }
 
 #pdf-canvas {
-    /* Remova max-width: 100% se existir */
     display: block;
     cursor: cell;
-    touch-action: pan-x pan-y; /* Permite rolar com o dedo, mas reserva o clique */
+    /* touch-action: pinch-zoom permite scroll e zoom nativo, 
+       mas deixa o JS processar toques individuais */
+    touch-action: pinch-zoom; 
 }
 
         .bg-navy { background-color: #1e293b; }
@@ -148,56 +149,79 @@ document.getElementById('pdf-input').addEventListener('change', async (e) => {
 });
 
 // 4. Captura do Toque no PDF (Lógica de Posicionamento)
+// Variáveis para distinguir clique de scroll
+let touchStartX = 0;
+let touchStartY = 0;
+const moveThreshold = 10; // Pixels de tolerância para considerar um "clique"
+
+const previewCanvas = document.getElementById('pdf-canvas');
+
+// Evento de Mouse (Desktop) continua igual
+previewCanvas.addEventListener('mousedown', handlePointer);
+
+// Evento de Toque (Mobile) OTIMIZADO
+previewCanvas.addEventListener('touchstart', (e) => {
+    // Registra onde o toque começou
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+}, { passive: true }); // passive: true permite que o scroll ocorra livremente
+
+previewCanvas.addEventListener('touchend', (e) => {
+    // Calcula quanto o dedo se moveu
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+    
+    const deltaX = Math.abs(touchEndX - touchStartX);
+    const deltaY = Math.abs(touchEndY - touchStartY);
+
+    // Se o dedo quase não se moveu, é um CLIQUE (Assinatura)
+    if (deltaX < moveThreshold && deltaY < moveThreshold) {
+        // Como o evento já terminou, chamamos a função manualmente
+        // Passamos o evento original de forma simulada ou adaptada
+        const simulatedEvent = {
+            clientX: touchEndX,
+            clientY: touchEndY,
+            target: previewCanvas,
+            getBoundingClientRect: () => previewCanvas.getBoundingClientRect()
+        };
+        handlePointer(simulatedEvent);
+    }
+    // Se o movimento foi maior que o threshold, o navegador 
+    // já tratou como scroll nativo automaticamente.
+}, { passive: true });
+
 const handlePointer = function(e) {
     if (!pdfRenderedPage) return;
 
-    const rect = this.getBoundingClientRect();
+    // Pega o rect do canvas (this ou e.target)
+    const targetElement = this || e.target;
+    const rect = targetElement.getBoundingClientRect();
+    
     let x, y;
 
-    // Detecta se é touch ou mouse
-    if (e.touches && e.touches.length > 0) {
-        x = e.touches[0].clientX - rect.left;
-        y = e.touches[0].clientY - rect.top;
-    } else {
-        x = e.offsetX;
-        y = e.offsetY;
-    }
+    // Se for o evento simulado ou mouse
+    x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
+    y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
 
-    // Coordenadas base do PDF (escala 1.0)
+    // O resto da lógica de cálculo (RENDER_SCALE) permanece a mesma...
     const pdfViewport = pdfRenderedPage.getViewport({ scale: 1 });
-
-    // Cálculo exato: divide a posição do clique pela escala de renderização
     signaturePos = {
         x: x / RENDER_SCALE,
         y: pdfViewport.height - (y / RENDER_SCALE)
     };
 
-    // Feedback Visual: Desenha o marcador azul no local
-    const ctx = this.getContext('2d');
+    const ctx = targetElement.getContext('2d');
     const visualViewport = pdfRenderedPage.getViewport({ scale: RENDER_SCALE });
 
-    // Limpa e redesenha a página antes de colocar o marcador
     pdfRenderedPage.render({ canvasContext: ctx, viewport: visualViewport }).promise.then(() => {
         ctx.strokeStyle = "#3b82f6";
         ctx.lineWidth = 4;
         ctx.setLineDash([8, 4]);
-        // Desenha o retângulo de posicionamento (proporcional ao clique)
         ctx.strokeRect(x - 60, y - 30, 120, 60);
     });
 
     document.getElementById('download-btn').disabled = false;
 };
-
-// Eventos para o Preview
-const previewCanvas = document.getElementById('pdf-canvas');
-previewCanvas.addEventListener('mousedown', handlePointer);
-previewCanvas.addEventListener('touchstart', (e) => {
-    // Permite scroll se usar 2 dedos, mas marca assinatura se for toque simples
-    if (e.touches.length === 1) {
-        e.preventDefault();
-        handlePointer.call(previewCanvas, e);
-    }
-}, { passive: false });
 
 // 5. Geração e Download do PDF Final
 document.getElementById('download-btn').addEventListener('click', async () => {
