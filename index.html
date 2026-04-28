@@ -25,14 +25,25 @@
         }
 
         /* Estilização da área de preview do PDF */
-        #pdf-canvas {
-         touch-action: none;   
-         max-width: 100%;
-            height: auto;
-            border: 1px solid #e2e8f0;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-            cursor: cell;
-        }
+/* Estilização da área de preview do PDF */
+#pdf-canvas {
+    /* Removido max-width: 100% para permitir scroll horizontal se necessário */
+    height: auto;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    cursor: cell;
+    touch-action: none; /* Importante para não rolar a página ao marcar a assinatura */
+}
+
+/* Container de scroll para o PDF */
+.pdf-scroll-container {
+    max-height: 70vh; /* Define uma altura máxima para a janela do PDF */
+    overflow: auto;   /* Permite rolagem vertical e horizontal */
+    border-radius: 0.75rem;
+    background: #cbd5e1;
+    -webkit-overflow-scrolling: touch; /* Rolagem suave no iOS */
+}
+
 
         .bg-navy { background-color: #1e293b; }
         .text-navy { color: #1e293b; }
@@ -85,6 +96,9 @@
                 <div class="flex justify-center overflow-auto rounded-lg">
                     <canvas id="pdf-canvas"></canvas>
                 </div>
+<div class="pdf-scroll-container border border-slate-300">
+    <canvas id="pdf-canvas"></canvas>
+</div>
 
                 <button id="download-btn" class="w-full mt-6 bg-navy text-white font-bold py-4 rounded-2xl shadow-lg hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed" disabled>
                     Baixar PDF Assinado
@@ -132,82 +146,68 @@ document.getElementById('pdf-input').addEventListener('change', async (e) => {
     document.getElementById('file-name').textContent = file.name;
     pdfBytes = await file.arrayBuffer();
 
-    try {
-        // Carrega o documento usando PDF.js
-        const loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
-        const pdf = await loadingTask.promise;
-        pdfRenderedPage = await pdf.getPage(1);
+    const loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
+    const pdf = await loadingTask.promise;
+    pdfRenderedPage = await pdf.getPage(1);
 
-        const previewCanvas = document.getElementById('pdf-canvas');
-        const context = previewCanvas.getContext('2d');
+    const previewCanvas = document.getElementById('pdf-canvas');
+    const context = previewCanvas.getContext('2d');
 
-        // Pega o tamanho real da página (escala 1)
-        const unscaledViewport = pdfRenderedPage.getViewport({ scale: 1 });
-        
-        // Calcula escala baseada na largura da tela mobile
-        const containerWidth = document.getElementById('preview-section').offsetWidth - 40;
-        const scale = containerWidth / unscaledViewport.width;
-        const viewport = pdfRenderedPage.getViewport({ scale: scale });
+    // CONFIGURAÇÃO DE ESCALA MAIOR
+    // Usamos escala 1.5 para garantir nitidez e tamanho suficiente para leitura
+    const viewport = pdfRenderedPage.getViewport({ scale: 1.5 });
 
-        previewCanvas.width = viewport.width;
-        previewCanvas.height = viewport.height;
+    previewCanvas.width = viewport.width;
+    previewCanvas.height = viewport.height;
 
-        await pdfRenderedPage.render({
-            canvasContext: context,
-            viewport: viewport
-        }).promise;
+    await pdfRenderedPage.render({
+        canvasContext: context,
+        viewport: viewport
+    }).promise;
 
-        document.getElementById('preview-section').classList.remove('hidden');
-        previewCanvas.scrollIntoView({ behavior: 'smooth' });
-    } catch (error) {
-        console.error("Erro ao renderizar PDF:", error);
-        alert("Não foi possível carregar o PDF.");
-    }
+    document.getElementById('preview-section').classList.remove('hidden');
+    // Faz o scroll automático para o início do PDF
+    document.querySelector('.pdf-scroll-container').scrollTop = 0;
 });
 
     // 3. Captura o clique ou toque na prévia
-    const handlePointer = function(e) {
-        if (!pdfRenderedPage) return;
+const handlePointer = function(e) {
+    if (!pdfRenderedPage) return;
 
-        const rect = this.getBoundingClientRect();
-        // Trata clique do mouse ou toque do dedo
-        const clientX = e.clientX || (e.touches && e.touches[0].clientX);
-        const clientY = e.clientY || (e.touches && e.touches[0].clientY);
-        
-        const x = clientX - rect.left;
-        const y = clientY - rect.top;
+    const rect = this.getBoundingClientRect();
+    const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+    const clientY = e.clientY || (e.touches && e.touches[0].clientY);
 
-        const pdfViewport = pdfRenderedPage.getViewport({ scale: 1 });
-        const scaleX = pdfViewport.width / rect.width;
-        const scaleY = pdfViewport.height / rect.height;
+    // Posição relativa ao canvas (considerando o scroll)
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
 
-        signaturePos = {
-            x: x * scaleX,
-            y: pdfViewport.height - (y * scaleY)
-        };
+    // Converte a posição do clique para o sistema de coordenadas do PDF (escala 1.0)
+    const currentViewport = pdfRenderedPage.getViewport({ scale: 1.5 }); // A mesma escala usada acima
+    const pdfViewport = pdfRenderedPage.getViewport({ scale: 1 });
 
-        // Redesenha a página para limpar marcações anteriores
-        const ctx = this.getContext('2d');
-        const containerWidth = document.getElementById('preview-section').offsetWidth - 40;
-        const viewport = pdfRenderedPage.getViewport({ scale: containerWidth / pdfViewport.width });
-        
-        pdfRenderedPage.render({ canvasContext: ctx, viewport: viewport }).promise.then(() => {
-            // Desenha o marcador visual (retângulo azul de feedback)
-            ctx.strokeStyle = "#3b82f6";
-            ctx.lineWidth = 3;
-            ctx.setLineDash([5, 5]); // Linha tracejada para parecer uma área de colagem
-            ctx.strokeRect(x - 60, y - 30, 120, 60);
-        });
+    const scaleX = pdfViewport.width / currentViewport.width;
+    const scaleY = pdfViewport.height / currentViewport.height;
 
-        document.getElementById('download-btn').disabled = false;
+    signaturePos = {
+        x: x * scaleX,
+        y: pdfViewport.height - (y * scaleY)
     };
 
-    const previewCanvas = document.getElementById('pdf-canvas');
-    previewCanvas.addEventListener('mousedown', handlePointer);
-    previewCanvas.addEventListener('touchstart', (e) => {
-        e.preventDefault(); // Impede o scroll ao tentar marcar o local
-        handlePointer.call(previewCanvas, e);
-    }, { passive: false });
+    // Redesenha para feedback visual
+    const ctx = this.getContext('2d');
+    pdfRenderedPage.render({ 
+        canvasContext: ctx, 
+        viewport: currentViewport 
+    }).promise.then(() => {
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 4;
+        ctx.setLineDash([5, 5]);
+        ctx.strokeRect(x - 60, y - 30, 120, 60);
+    });
+
+    document.getElementById('download-btn').disabled = false;
+};
 
 
     // 4. Geração do PDF Final
