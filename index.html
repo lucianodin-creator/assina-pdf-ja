@@ -41,7 +41,20 @@
         /* Modal de Assinatura */
         #sig-modal { display: none; position: fixed; inset: 0; background: white; z-index: 100; flex-direction: column; }
         #signature-pad { width: 100%; height: 100%; background: #fdfdfd; cursor: crosshair; }
-    </style>
+
+#pdf-wrapper {
+    position: relative;
+    display: inline-block; /* Ajusta o container ao tamanho exato do PDF */
+    margin: 0 auto;
+}
+
+.draggable-sig {
+    z-index: 10; /* Garante que fique sobre o PDF */
+    background: rgba(59, 130, 246, 0.1); /* Fundo leve para facilitar visualização no mobile */
+}
+ 
+
+   </style>
 </head>
 <body>
 
@@ -150,45 +163,65 @@
 
         function closeSigModal() { modal.style.display = 'none'; }
 
-        function confirmSignature() {
-            if (sigPad.isEmpty()) return alert("Assine primeiro");
-            const dataUrl = sigPad.toDataURL();
-            createDraggableSignature(dataUrl);
-            closeSigModal();
-        }
+function confirmSignature() {
+    if (sigPad.isEmpty()) return alert("Assine primeiro");
+    
+    const dataUrl = sigPad.toDataURL();
+    const canvas = document.getElementById('pdf-canvas');
+    
+    // Calcula o centro do canvas visível
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+
+    // Cria a assinatura centralizada (descontando metade da largura/altura da assinatura)
+    // Usamos 150x75 como tamanho padrão inicial
+    createDraggableSignature(dataUrl, centerX - 75, centerY - 37);
+    
+    closeSigModal();
+}
+
 
         // --- Assinatura Manipulável ---
-        function createDraggableSignature(url) {
-            if (activeSignature) activeSignature.remove();
+function createDraggableSignature(url, initialX, initialY) {
+    if (activeSignature) activeSignature.remove();
 
-            const div = document.createElement('div');
-            div.className = 'draggable-sig';
-            div.style.width = '150px';
-            div.style.height = '75px';
-            div.style.left = '50px';
-            div.style.top = '50px';
+    const div = document.createElement('div');
+    div.className = 'draggable-sig';
+    div.style.width = '150px';
+    div.style.height = '75px';
+    
+    // Posicionamento inicial centralizado
+    div.style.left = initialX + 'px';
+    div.style.top = initialY + 'px';
 
-            const img = document.createElement('img');
-            img.src = url;
-            img.style.width = '100%';
-            img.style.height = '100%';
-            img.style.pointerEvents = 'none';
+    const img = document.createElement('img');
+    img.src = url;
+    img.style.width = '100%';
+    img.style.height = '100%';
+    img.style.pointerEvents = 'none';
 
-            const controls = document.createElement('div');
-            controls.className = 'sig-controls';
-            controls.innerHTML = `
-                <button onclick="rotateSig()">Girar</button>
-                <button onclick="cloneSig()">Clonar</button>
-                <button onclick="this.parentElement.parentElement.remove()" class="text-red-500">Apagar</button>
-            `;
+    const controls = document.createElement('div');
+    controls.className = 'sig-controls';
+    controls.innerHTML = `
+        <button onclick="rotateSig()">Girar</button>
+        <button onclick="cloneSig()">Clonar</button>
+        <button onclick="deleteSig(this)" class="text-red-500">Apagar</button>
+    `;
 
-            div.appendChild(controls);
-            div.appendChild(img);
-            document.getElementById('pdf-wrapper').appendChild(div);
-            
-            makeDraggable(div);
-            activeSignature = div;
-        }
+    div.appendChild(controls);
+    div.appendChild(img);
+    document.getElementById('pdf-wrapper').appendChild(div);
+    
+    makeDraggable(div);
+    activeSignature = div;
+}
+
+// Função auxiliar para apagar corretamente
+function deleteSig(btn) {
+    btn.closest('.draggable-sig').remove();
+    activeSignature = null;
+}
+
 
         function makeDraggable(el) {
             let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
