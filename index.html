@@ -81,129 +81,171 @@
     </main>
 
 <script>
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+// 1. Configurações Iniciais e PDF.js Worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-    const { PDFDocument } = PDFLib;
-    let pdfBytes = null;
-    let signaturePos = null;
-    let pdfRenderedPage = null;
-    const RENDER_SCALE = 2.0; // Escala fixa para melhor visualização e precisão
+const { PDFDocument } = PDFLib;
+let pdfBytes = null;
+let signaturePos = null;
+let pdfRenderedPage = null;
+const RENDER_SCALE = 2.0; // Escala maior para permitir scroll e melhor precisão no mobile
 
-    // 1. Configuração da Assinatura
-    const canvas = document.getElementById('signature-pad');
-    const signaturePad = new SignaturePad(canvas, { backgroundColor: 'rgba(255, 255, 255, 0)' });
+// 2. Configuração do Canvas de Assinatura (Passo 2)
+const sigCanvas = document.getElementById('signature-pad');
+const signaturePad = new SignaturePad(sigCanvas, { 
+    backgroundColor: 'rgba(255, 255, 255, 0)' 
+});
 
-    function resizeSignatureCanvas() {
-        const ratio = Math.max(window.devicePixelRatio || 1, 1);
-        canvas.width = canvas.offsetWidth * ratio;
-        canvas.height = canvas.offsetHeight * ratio;
-        canvas.getContext("2d").scale(ratio, ratio);
-        signaturePad.clear();
-    }
-    window.addEventListener("resize", resizeSignatureCanvas);
-    resizeSignatureCanvas();
-    document.getElementById('clear-btn').addEventListener('click', () => signaturePad.clear());
+function resizeSignatureCanvas() {
+    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+    sigCanvas.width = sigCanvas.offsetWidth * ratio;
+    sigCanvas.height = sigCanvas.offsetHeight * ratio;
+    sigCanvas.getContext("2d").scale(ratio, ratio);
+    signaturePad.clear();
+}
 
-    // 2. Lógica de Upload e Renderização
-    document.getElementById('pdf-input').addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+window.addEventListener("resize", resizeSignatureCanvas);
+resizeSignatureCanvas();
+document.getElementById('clear-btn').addEventListener('click', () => signaturePad.clear());
 
-        document.getElementById('file-name').textContent = file.name;
-        pdfBytes = await file.arrayBuffer();
+// 3. Upload e Renderização do PDF (Passo 3)
+document.getElementById('pdf-input').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
 
+    document.getElementById('file-name').textContent = file.name;
+    pdfBytes = await file.arrayBuffer();
+
+    try {
         const loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
         const pdf = await loadingTask.promise;
         pdfRenderedPage = await pdf.getPage(1);
 
-const previewCanvas = document.getElementById('pdf-canvas');
-const context = previewCanvas.getContext('2d');
+        const previewCanvas = document.getElementById('pdf-canvas');
+        const context = previewCanvas.getContext('2d');
         const viewport = pdfRenderedPage.getViewport({ scale: RENDER_SCALE });
 
-previewCanvas.width = viewport.width;
-previewCanvas.height = viewport.height;
+        previewCanvas.width = viewport.width;
+        previewCanvas.height = viewport.height;
 
-await pdfRenderedPage.render({
-    canvasContext: context,
-    viewport: viewport
-}).promise;
-        await pdfRenderedPage.render({ canvasContext: context, viewport: viewport }).promise;
+        // Renderização única e limpa
+        await pdfRenderedPage.render({ 
+            canvasContext: context, 
+            viewport: viewport 
+        }).promise;
 
         document.getElementById('preview-section').classList.remove('hidden');
-        document.querySelector('.pdf-scroll-container').scrollTop = 0;
-    });
-
-    // 3. Captura do toque responsivo
-    const handlePointer = function(e) {
-        if (!pdfRenderedPage) return;
-
-        const rect = this.getBoundingClientRect();
-        let x, y;
-
-        if (e.touches && e.touches.length > 0) {
-            x = e.touches[0].clientX - rect.left;
-            y = e.touches[0].clientY - rect.top;
-        } else {
-            x = e.offsetX;
-            y = e.offsetY;
-        }
-
-        const pdfViewport = pdfRenderedPage.getViewport({ scale: 1 });
         
-        // Converte coordenada do clique para coordenada real do PDF
-        signaturePos = {
-            x: x / RENDER_SCALE,
-            y: pdfViewport.height - (y / RENDER_SCALE)
-        };
+        // Reseta o scroll para o topo ao carregar novo arquivo
+        const container = document.querySelector('.pdf-scroll-container');
+        container.scrollTop = 0;
+        container.scrollLeft = 0;
 
-        // Feedback Visual
-        const ctx = this.getContext('2d');
-        const viewport = pdfRenderedPage.getViewport({ scale: RENDER_SCALE });
-        
-        pdfRenderedPage.render({ canvasContext: ctx, viewport: viewport }).promise.then(() => {
-            ctx.strokeStyle = "#3b82f6";
-            ctx.lineWidth = 3;
-            ctx.setLineDash([5, 5]);
-            ctx.strokeRect(x - 60, y - 30, 120, 60);
-        });
+    } catch (err) {
+        console.error(err);
+        alert("Erro ao carregar o PDF.");
+    }
+});
 
-        document.getElementById('download-btn').disabled = false;
+// 4. Captura do Toque no PDF (Lógica de Posicionamento)
+const handlePointer = function(e) {
+    if (!pdfRenderedPage) return;
+
+    const rect = this.getBoundingClientRect();
+    let x, y;
+
+    // Detecta se é touch ou mouse
+    if (e.touches && e.touches.length > 0) {
+        x = e.touches[0].clientX - rect.left;
+        y = e.touches[0].clientY - rect.top;
+    } else {
+        x = e.offsetX;
+        y = e.offsetY;
+    }
+
+    // Coordenadas base do PDF (escala 1.0)
+    const pdfViewport = pdfRenderedPage.getViewport({ scale: 1 });
+
+    // Cálculo exato: divide a posição do clique pela escala de renderização
+    signaturePos = {
+        x: x / RENDER_SCALE,
+        y: pdfViewport.height - (y / RENDER_SCALE)
     };
 
-    const previewCanvas = document.getElementById('pdf-canvas');
-    previewCanvas.addEventListener('mousedown', handlePointer);
-    previewCanvas.addEventListener('touchstart', (e) => {
+    // Feedback Visual: Desenha o marcador azul no local
+    const ctx = this.getContext('2d');
+    const visualViewport = pdfRenderedPage.getViewport({ scale: RENDER_SCALE });
+
+    // Limpa e redesenha a página antes de colocar o marcador
+    pdfRenderedPage.render({ canvasContext: ctx, viewport: visualViewport }).promise.then(() => {
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 4;
+        ctx.setLineDash([8, 4]);
+        // Desenha o retângulo de posicionamento (proporcional ao clique)
+        ctx.strokeRect(x - 60, y - 30, 120, 60);
+    });
+
+    document.getElementById('download-btn').disabled = false;
+};
+
+// Eventos para o Preview
+const previewCanvas = document.getElementById('pdf-canvas');
+previewCanvas.addEventListener('mousedown', handlePointer);
+previewCanvas.addEventListener('touchstart', (e) => {
+    // Permite scroll se usar 2 dedos, mas marca assinatura se for toque simples
+    if (e.touches.length === 1) {
         e.preventDefault();
         handlePointer.call(previewCanvas, e);
-    }, { passive: false });
+    }
+}, { passive: false });
 
-    // 4. Download
-    document.getElementById('download-btn').addEventListener('click', async () => {
-        if (signaturePad.isEmpty()) return alert("Assine primeiro!");
+// 5. Geração e Download do PDF Final
+document.getElementById('download-btn').addEventListener('click', async () => {
+    if (signaturePad.isEmpty()) {
+        alert("Por favor, desenhe sua assinatura no Passo 2.");
+        return;
+    }
+    if (!signaturePos) {
+        alert("Toque no local do documento onde deseja assinar.");
+        return;
+    }
 
-        try {
-            const finalDoc = await PDFDocument.load(pdfBytes);
-            const signatureImage = await finalDoc.embedPng(signaturePad.toDataURL());
-            const firstPage = finalDoc.getPages()[0];
+    try {
+        const finalDoc = await PDFDocument.load(pdfBytes);
+        const signatureImage = await finalDoc.embedPng(signaturePad.toDataURL());
+        const pages = finalDoc.getPages();
+        const firstPage = pages[0];
 
-            firstPage.drawImage(signatureImage, {
-                x: signaturePos.x - 60,
-                y: signaturePos.y - 30,
-                width: 120,
-                height: 60,
-            });
+        // O tamanho da assinatura no PDF final (em pontos)
+        const sigWidth = 120;
+        const sigHeight = 60;
 
-            const pdfResultBytes = await finalDoc.save();
-            const blob = new Blob([pdfResultBytes], { type: 'application/pdf' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = "assinado.pdf";
-            a.click();
-        } catch (err) {
-            alert("Erro ao gerar PDF.");
-        }
-    });
+        firstPage.drawImage(signatureImage, {
+            x: signaturePos.x - (sigWidth / 2),
+            y: signaturePos.y - (sigHeight / 2),
+            width: sigWidth,
+            height: sigHeight,
+        });
+
+        const pdfResultBytes = await finalDoc.save();
+        const blob = new Blob([pdfResultBytes], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = "documento_assinado.pdf";
+        document.body.appendChild(a);
+        a.click();
+        
+        // Limpeza
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    } catch (err) {
+        console.error(err);
+        alert("Erro ao gerar o arquivo assinado.");
+    }
+});
 </script>
+
 </body>
 </html>
