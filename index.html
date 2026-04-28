@@ -12,6 +12,9 @@
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
         
@@ -23,7 +26,8 @@
 
         /* Estilização da área de preview do PDF */
         #pdf-canvas {
-            max-width: 100%;
+         touch-action: none;   
+         max-width: 100%;
             height: auto;
             border: 1px solid #e2e8f0;
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
@@ -92,7 +96,9 @@
 
 <script>
     // Configuração do Worker do PDF.js (Obrigatório para renderizar o PDF)
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cloudflare.com';
+// Configuração correta do Worker do PDF.js
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
 
     const { PDFDocument } = PDFLib;
     let pdfDoc = null;
@@ -119,38 +125,45 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cloudflare.com';
     document.getElementById('clear-btn').addEventListener('click', () => signaturePad.clear());
 
     // 2. Lógica de Upload e RENDERIZAÇÃO REAL do PDF
-    document.getElementById('pdf-input').addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+document.getElementById('pdf-input').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
 
-        document.getElementById('file-name').textContent = file.name;
-        pdfBytes = await file.arrayBuffer();
+    document.getElementById('file-name').textContent = file.name;
+    pdfBytes = await file.arrayBuffer();
 
-        // --- INÍCIO DA RENDERIZAÇÃO REAL ---
+    try {
+        // Carrega o documento usando PDF.js
         const loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
         const pdf = await loadingTask.promise;
-        pdfRenderedPage = await pdf.getPage(1); // Pegamos a primeira página
+        pdfRenderedPage = await pdf.getPage(1);
 
         const previewCanvas = document.getElementById('pdf-canvas');
         const context = previewCanvas.getContext('2d');
 
-        // Ajusta a escala para caber na largura do dispositivo (mobile-first)
+        // Pega o tamanho real da página (escala 1)
+        const unscaledViewport = pdfRenderedPage.getViewport({ scale: 1 });
+        
+        // Calcula escala baseada na largura da tela mobile
         const containerWidth = document.getElementById('preview-section').offsetWidth - 40;
-        const viewport = pdfRenderedPage.getViewport({ scale: containerWidth / pdfRenderedPage.getViewport({scale:1}).width });
+        const scale = containerWidth / unscaledViewport.width;
+        const viewport = pdfRenderedPage.getViewport({ scale: scale });
 
         previewCanvas.width = viewport.width;
         previewCanvas.height = viewport.height;
 
-        // Desenha o conteúdo do PDF no Canvas
         await pdfRenderedPage.render({
             canvasContext: context,
             viewport: viewport
         }).promise;
-        // --- FIM DA RENDERIZAÇÃO REAL ---
 
         document.getElementById('preview-section').classList.remove('hidden');
         previewCanvas.scrollIntoView({ behavior: 'smooth' });
-    });
+    } catch (error) {
+        console.error("Erro ao renderizar PDF:", error);
+        alert("Não foi possível carregar o PDF.");
+    }
+});
 
     // 3. Captura o clique ou toque na prévia
     const handlePointer = function(e) {
