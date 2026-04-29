@@ -112,20 +112,56 @@ header {
             background: rgba(59, 130, 246, 0.05);
         }
 
-/* Garante que os controles fiquem sempre à frente de tudo */
+/* Alças de redimensionamento (bolinhas brancas) */
+.resizer {
+    width: 12px;
+    height: 12px;
+    background: white;
+    border: 2px solid #3b82f6;
+    border-radius: 50%;
+    position: absolute;
+    z-index: 20;
+}
+
+/* Posicionamento das alças */
+.resizer.nw { top: -6px; left: -6px; cursor: nw-resize; }
+.resizer.ne { top: -6px; right: -6px; cursor: ne-resize; }
+.resizer.sw { bottom: -6px; left: -6px; cursor: sw-resize; }
+.resizer.se { bottom: -6px; right: -6px; cursor: se-resize; }
+
+/* Botão de Giro Manual (separado conforme a imagem) */
+.rotate-handle {
+    position: absolute;
+    right: -40px; /* Separado da moldura */
+    top: -10px;
+    width: 32px;
+    height: 32px;
+    background: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    cursor: grab;
+    z-index: 30;
+    border: 1px solid #e2e8f0;
+}
+
+/* Ajuste nos controles superiores (Clonar e Lixeira) */
 .sig-controls {
     position: absolute;
-    top: -45px;
-    left: 0;
+    top: -50px;
+    left: 50%;
+    transform: translateX(-50%);
     display: flex;
-    gap: 4px;
+    gap: 8px;
     background: white;
-    padding: 4px;
-    border-radius: 6px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    z-index: 9999 !important; /* Valor alto para evitar sobreposição */
-    pointer-events: auto !important; /* Garante que aceite cliques */
+    padding: 6px 12px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    z-index: 100;
 }
+
 
 .draggable-sig img {
     pointer-events: none; /* A imagem não deve capturar o clique, apenas o container pai */
@@ -420,24 +456,36 @@ let elementToDelete = null;
 
 function createDraggableSignature(url, targetPage) {
     const div = document.createElement('div');
-    div.className = 'draggable-sig absolute z-10 border-2 border-dashed border-blue-400';
+    div.className = 'draggable-sig absolute border-2 border-dashed border-blue-400';
     div.style.width = '150px';
     div.style.height = '75px';
     div.style.left = '50px';
     div.style.top = '100px';
+    div.dataset.rotation = 0;
 
-    // O segredo é o stopPropagation nos botões
     div.innerHTML = `
         <div class="sig-controls" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()">
-            <button class="bg-slate-100 px-2 py-1 rounded" onclick="rotateSig(this)">Girar</button>
-            <button class="bg-slate-100 px-2 py-1 rounded" onclick="replicateSig(this)">Clonar</button>
-            <button class="text-red-500 px-2 py-1" onclick="askDelete(this)">X</button>
+            <button class="flex items-center gap-1 text-slate-600 font-bold text-xs" onclick="replicateSig(this)">
+                <span class="text-blue-500">📋</span> Copiar
+            </button>
+            <div class="w-[1px] h-4 bg-slate-200"></div>
+            <button class="text-red-500 font-bold text-xs" onclick="askDelete(this)">✕</button>
         </div>
-        <img src="${url}" class="w-full h-full">
+
+        <div class="rotate-handle" title="Girar">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1e293b" stroke-width="2.5"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        </div>
+
+        <div class="resizer nw"></div>
+        <div class="resizer ne"></div>
+        <div class="resizer sw"></div>
+        <div class="resizer se"></div>
+
+        <img src="${url}" class="w-full h-full pointer-events-none select-none">
     `;
 
     targetPage.appendChild(div);
-    makeDraggable(div);
+    initAdvancedControls(div);
 }
 
 
@@ -506,32 +554,83 @@ function rotateSig(btn) {
 
 // --- 3. Interatividade (Drag & Drop) ---
 
-function makeDraggable(el) {
-    let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-    
-    el.onmousedown = el.ontouchstart = function(e) {
-        // Se o clique for em um botão dentro dos controles, não inicia o arrasto
-        if (e.target.tagName === 'BUTTON') return;
-        
-        e.preventDefault();
-        pos3 = e.clientX || e.touches[0].clientX;
-        pos4 = e.clientY || e.touches[0].clientY;
-        
-        document.onmouseup = document.ontouchend = () => {
-            document.onmouseup = document.onmousemove = document.ontouchend = document.ontouchmove = null;
+function initAdvancedControls(el) {
+    let isDragging = false;
+    let isRotating = false;
+    let isResizing = false;
+    let currentResizer = null;
+
+    // --- ARRASTAR ---
+    el.addEventListener('mousedown', (e) => {
+        if (e.target.classList.contains('resizer') || e.target.closest('.rotate-handle') || e.target.closest('.sig-controls')) return;
+        isDragging = true;
+        let startX = e.clientX - el.offsetLeft;
+        let startY = e.clientY - el.offsetTop;
+
+        const move = (e) => {
+            if (!isDragging) return;
+            el.style.left = (e.clientX - startX) + 'px';
+            el.style.top = (e.clientY - startY) + 'px';
         };
-        
-        document.onmousemove = document.ontouchmove = function(e) {
-            const cx = e.clientX || e.touches[0].clientX;
-            const cy = e.clientY || e.touches[0].clientY;
-            pos1 = pos3 - cx;
-            pos2 = pos4 - cy;
-            pos3 = cx;
-            pos4 = cy;
-            el.style.top = (el.offsetTop - pos2) + "px";
-            el.style.left = (el.offsetLeft - pos1) + "px";
+        const up = () => { isDragging = false; window.removeEventListener('mousemove', move); };
+        window.addEventListener('mousemove', move);
+        window.addEventListener('mouseup', up);
+    });
+
+    // --- GIRAR MANUAL ---
+    const rotateHandle = el.querySelector('.rotate-handle');
+    rotateHandle.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        isRotating = true;
+        const rect = el.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+
+        const move = (e) => {
+            if (!isRotating) return;
+            const angle = Math.atan2(e.clientY - centerY, e.clientX - centerX);
+            const degree = angle * (180 / Math.PI);
+            el.dataset.rotation = degree;
+            el.style.transform = `rotate(${degree}deg)`;
         };
-    };
+        const up = () => { isRotating = false; window.removeEventListener('mousemove', move); };
+        window.addEventListener('mousemove', move);
+        window.addEventListener('mouseup', up);
+    });
+
+    // --- REDIMENSIONAR ---
+    el.querySelectorAll('.resizer').forEach(resizer => {
+        resizer.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+            isResizing = true;
+            currentResizer = e.target;
+            let startW = el.offsetWidth;
+            let startH = el.offsetHeight;
+            let startX = e.clientX;
+            let startY = e.clientY;
+            let startL = el.offsetLeft;
+            let startT = el.offsetTop;
+
+            const move = (e) => {
+                if (!isResizing) return;
+                const diffX = e.clientX - startX;
+                const diffY = e.clientY - startY;
+
+                if (currentResizer.classList.contains('se')) {
+                    el.style.width = (startW + diffX) + 'px';
+                    el.style.height = (startH + diffY) + 'px';
+                } else if (currentResizer.classList.contains('sw')) {
+                    el.style.width = (startW - diffX) + 'px';
+                    el.style.left = (startL + diffX) + 'px';
+                    el.style.height = (startH + diffY) + 'px';
+                }
+                // Outras direções (nw, ne) podem ser adicionadas seguindo a mesma lógica
+            };
+            const up = () => { isResizing = false; window.removeEventListener('mousemove', move); };
+            window.addEventListener('mousemove', move);
+            window.addEventListener('mouseup', up);
+        });
+    });
 }
 
 
