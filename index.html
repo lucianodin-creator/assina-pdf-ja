@@ -329,6 +329,76 @@ header {
 
 <script>
 
+<script>
+// Configuração do PDF.js
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const { PDFDocument, degrees } = PDFLib;
+
+// Estado Global
+let pdfBytes = null;
+let pdfDocJS = null;
+let currentScale = 1.2;
+const wrapper = document.getElementById('pdf-wrapper');
+const saveBtn = document.getElementById('save-btn');
+
+// Inicialização do Signature Pad
+const sigCanvas = document.getElementById('signature-pad');
+const sigPad = new SignaturePad(sigCanvas);
+
+// --- 1. CARREGAMENTO DO ARQUIVO ---
+document.getElementById('pdf-input').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Limpa assinaturas antigas e o PDF anterior
+    wrapper.innerHTML = '';
+    document.querySelectorAll('.draggable-sig').forEach(el => el.remove());
+    saveBtn.disabled = true;
+
+    pdfBytes = await file.arrayBuffer();
+    pdfDocJS = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
+
+    renderAllPages();
+});
+
+// --- 2. RENDERIZAÇÃO DAS PÁGINAS ---
+async function renderAllPages() {
+    wrapper.innerHTML = ''; // Limpa para zoom
+
+    for (let i = 1; i <= pdfDocJS.numPages; i++) {
+        const page = await pdfDocJS.getPage(i);
+        const viewport = page.getViewport({ scale: currentScale });
+
+        // Container da Página
+        const pageContainer = document.createElement('div');
+        pageContainer.className = 'page-block relative bg-white shadow-lg mb-6 mx-auto';
+        pageContainer.dataset.pageNum = i;
+        pageContainer.style.width = `${viewport.width}px`;
+        pageContainer.style.height = `${viewport.height}px`;
+
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        pageContainer.appendChild(canvas);
+        wrapper.appendChild(pageContainer);
+
+        await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+    }
+    saveBtn.disabled = false;
+}
+
+// --- 3. ZOOM ---
+function changeZoom(delta) {
+    if (!pdfDocJS) return;
+    currentScale = Math.min(Math.max(currentScale + delta, 0.5), 3);
+    renderAllPages();
+}
+
+// ... (Aqui você continua com as funções confirmSignature, createDraggableSignature, etc., que você já tem) ...
+
+
 // ... (mantenha as definições globais e renderização de PDF até a linha 315) ...
 
 function confirmSignature() {
