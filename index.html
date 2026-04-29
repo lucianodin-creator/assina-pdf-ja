@@ -112,28 +112,12 @@ header {
             background: rgba(59, 130, 246, 0.05);
         }
 
-/* Alças de redimensionamento (bolinhas brancas) */
-.resizer {
-    width: 12px;
-    height: 12px;
-    background: white;
-    border: 2px solid #3b82f6;
-    border-radius: 50%;
-    position: absolute;
-    z-index: 20;
-}
-
-/* Posicionamento das alças */
-.resizer.nw { top: -6px; left: -6px; cursor: nw-resize; }
-.resizer.ne { top: -6px; right: -6px; cursor: ne-resize; }
-.resizer.sw { bottom: -6px; left: -6px; cursor: sw-resize; }
-.resizer.se { bottom: -6px; right: -6px; cursor: se-resize; }
-
-/* Botão de Giro Manual (separado conforme a imagem) */
+/* Botão de Giro Manual Separado */
 .rotate-handle {
     position: absolute;
-    right: -40px; /* Separado da moldura */
-    top: -10px;
+    right: -45px;
+    top: 50%;
+    transform: translateY(-50%);
     width: 32px;
     height: 32px;
     background: white;
@@ -147,19 +131,32 @@ header {
     border: 1px solid #e2e8f0;
 }
 
-/* Ajuste nos controles superiores (Clonar e Lixeira) */
+/* Alças de Redimensionamento */
+.resizer {
+    width: 12px;
+    height: 12px;
+    background: white;
+    border: 2px solid #3b82f6;
+    border-radius: 50%;
+    position: absolute;
+    z-index: 20;
+}
+.resizer.se { bottom: -6px; right: -6px; cursor: se-resize; }
+
+/* Balão de Controles Superiores */
 .sig-controls {
     position: absolute;
-    top: -50px;
+    top: -55px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
-    gap: 8px;
+    gap: 12px;
     background: white;
-    padding: 6px 12px;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    padding: 8px 16px;
+    border-radius: 10px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
     z-index: 100;
+    border: 1px solid #f1f5f9;
 }
 
 
@@ -465,22 +462,18 @@ function createDraggableSignature(url, targetPage) {
 
     div.innerHTML = `
         <div class="sig-controls" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()">
-            <button class="flex items-center gap-1 text-slate-600 font-bold text-xs" onclick="replicateSig(this)">
+            <button onclick="replicateSig(this)" class="flex items-center gap-1 text-slate-700 font-bold text-sm">
                 <span class="text-blue-500">📋</span> Copiar
             </button>
             <div class="w-[1px] h-4 bg-slate-200"></div>
-            <button class="text-red-500 font-bold text-xs" onclick="askDelete(this)">✕</button>
+            <button onclick="askDelete(this)" class="text-red-500 font-bold text-sm">✕</button>
         </div>
 
-        <div class="rotate-handle" title="Girar">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1e293b" stroke-width="2.5"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        <div class="rotate-handle" onmousedown="event.stopPropagation()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
         </div>
 
-        <div class="resizer nw"></div>
-        <div class="resizer ne"></div>
-        <div class="resizer sw"></div>
         <div class="resizer se"></div>
-
         <img src="${url}" class="w-full h-full pointer-events-none select-none">
     `;
 
@@ -488,43 +481,83 @@ function createDraggableSignature(url, targetPage) {
     initAdvancedControls(div);
 }
 
-
-// NOVO: Clonar para todas as páginas na mesma posição
+// FUNÇÃO CLONAR: Copia para a mesma posição em todas as páginas
 function replicateSig(btn) {
     const original = btn.closest('.draggable-sig');
     const imgUrl = original.querySelector('img').src;
-    const top = original.style.top;
-    const left = original.style.left;
-    const rotation = original.dataset.rotation || 0;
+    const props = {
+        w: original.style.width,
+        h: original.style.height,
+        t: original.style.top,
+        l: original.style.left,
+        r: original.dataset.rotation
+    };
 
-    const allPages = document.querySelectorAll('.page-block');
-    const currentPageNum = original.closest('.page-block').dataset.pageNum;
-
-    allPages.forEach(page => {
-        if (page.dataset.pageNum !== currentPageNum) {
-            // Cria a assinatura na mesma posição em outras páginas
-            const div = document.createElement('div');
-            div.className = 'draggable-sig absolute z-10 border-2 border-dashed border-blue-400';
-            div.style.width = original.style.width;
-            div.style.height = original.style.height;
-            div.style.left = left;
-            div.style.top = top;
-            div.dataset.rotation = rotation;
-
-            div.innerHTML = original.innerHTML;
-            div.querySelector('img').style.transform = `rotate(${rotation}deg)`;
-            
-            page.appendChild(div);
-            makeDraggable(div);
+    document.querySelectorAll('.page-block').forEach(page => {
+        if (page !== original.parentElement) {
+            const clone = document.createElement('div');
+            clone.className = original.className;
+            clone.style.width = props.w;
+            clone.style.height = props.h;
+            clone.style.top = props.t;
+            clone.style.left = props.l;
+            clone.dataset.rotation = props.r;
+            clone.style.transform = `rotate(${props.r}deg)`;
+            clone.innerHTML = original.innerHTML;
+            page.appendChild(clone);
+            initAdvancedControls(clone);
         }
     });
 }
 
+// FUNÇÃO GIRAR MANUAL
+function initAdvancedControls(el) {
+    const rotateHandle = el.querySelector('.rotate-handle');
+    
+    rotateHandle.addEventListener('mousedown', (e) => {
+        const rect = el.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+
+        const onMove = (me) => {
+            const angle = Math.atan2(me.clientY - centerY, me.clientX - centerX);
+            const deg = angle * (180 / Math.PI);
+            el.dataset.rotation = deg;
+            el.style.transform = `rotate(${deg}deg)`;
+        };
+
+        const onUp = () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        };
+
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    });
+
+    // Adicione aqui também a lógica de arrastar (drag) e redimensionar (resize)
+    makeDraggable(el); 
+}
+
+
 // GESTÃO DE EXCLUSÃO (Conforme Print 2)
+
+let targetSig = null;
+
 function askDelete(btn) {
-    elementToDelete = btn.closest('.draggable-sig');
+    targetSig = btn.closest('.draggable-sig');
     document.getElementById('delete-modal').style.display = 'flex';
 }
+
+function executeDelete(mode) {
+    if (mode === 'page') {
+        if (targetSig) targetSig.remove();
+    } else if (mode === 'all') {
+        document.querySelectorAll('.draggable-sig').forEach(s => s.remove());
+    }
+    closeDeleteModal();
+}
+
 
 function closeDeleteModal() {
     document.getElementById('delete-modal').style.display = 'none';
