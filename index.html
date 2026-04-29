@@ -112,19 +112,25 @@ header {
             background: rgba(59, 130, 246, 0.05);
         }
 
-        .sig-controls {
-            position: absolute;
-            top: -45px;
-            left: 0;
-            display: flex;
-            gap: 4px;
-            background: white;
-            padding: 4px;
-            border-radius: 6px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
+/* Garante que os controles fiquem sempre à frente de tudo */
+.sig-controls {
+    position: absolute;
+    top: -45px;
+    left: 0;
+    display: flex;
+    gap: 4px;
+    background: white;
+    padding: 4px;
+    border-radius: 6px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    z-index: 9999 !important; /* Valor alto para evitar sobreposição */
+    pointer-events: auto !important; /* Garante que aceite cliques */
+}
 
-        .sig-controls button { font-size: 10px; font-weight: bold; padding: 4px 8px; border-radius: 4px; background: #f1f5f9; color: var(--primary); }
+.draggable-sig img {
+    pointer-events: none; /* A imagem não deve capturar o clique, apenas o container pai */
+    user-select: none;
+}
 
         /* Modal de Assinatura */
 #sig-modal {
@@ -418,20 +424,22 @@ function createDraggableSignature(url, targetPage) {
     div.style.width = '150px';
     div.style.height = '75px';
     div.style.left = '50px';
-    div.style.top = '50px';
+    div.style.top = '100px';
 
+    // O segredo é o stopPropagation nos botões
     div.innerHTML = `
-        <div class="sig-controls absolute -top-11 left-0 flex gap-1 bg-white p-1 rounded shadow-md border border-slate-100">
-            <button class="bg-slate-50 px-2 py-1 rounded hover:bg-blue-50" onclick="rotateSig(this)">Girar</button>
-            <button class="bg-slate-50 px-2 py-1 rounded hover:bg-blue-50" title="Copiar para todas as páginas" onclick="replicateSig(this)">Clonar</button>
-            <button class="text-red-500 px-2 py-1 hover:bg-red-50 rounded" onclick="askDelete(this)">X</button>
+        <div class="sig-controls" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()">
+            <button class="bg-slate-100 px-2 py-1 rounded" onclick="rotateSig(this)">Girar</button>
+            <button class="bg-slate-100 px-2 py-1 rounded" onclick="replicateSig(this)">Clonar</button>
+            <button class="text-red-500 px-2 py-1" onclick="askDelete(this)">X</button>
         </div>
-        <img src="${url}" class="w-full h-full pointer-events-none select-none">
+        <img src="${url}" class="w-full h-full">
     `;
 
     targetPage.appendChild(div);
     makeDraggable(div);
 }
+
 
 // NOVO: Clonar para todas as páginas na mesma posição
 function replicateSig(btn) {
@@ -500,44 +508,32 @@ function rotateSig(btn) {
 
 function makeDraggable(el) {
     let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-
-    const dragStart = (e) => {
+    
+    el.onmousedown = el.ontouchstart = function(e) {
+        // Se o clique for em um botão dentro dos controles, não inicia o arrasto
+        if (e.target.tagName === 'BUTTON') return;
+        
         e.preventDefault();
         pos3 = e.clientX || e.touches[0].clientX;
         pos4 = e.clientY || e.touches[0].clientY;
-        document.onmouseup = dragEnd;
-        document.onmousemove = dragMove;
-        document.ontouchend = dragEnd;
-        document.ontouchmove = dragMove;
-    };
-
-    const dragMove = (e) => {
-        const clientX = e.clientX || (e.touches ? e.touches[0].clientX : 0);
-        const clientY = e.clientY || (e.touches ? e.touches[0].clientY : 0);
         
-        pos1 = pos3 - clientX;
-        pos2 = pos4 - clientY;
-        pos3 = clientX;
-        pos4 = clientY;
-
-        const parent = el.parentElement;
-        let newTop = el.offsetTop - pos2;
-        let newLeft = el.offsetLeft - pos1;
-
-        // Mantém dentro dos limites da página
-        newTop = Math.max(0, Math.min(newTop, parent.offsetHeight - el.offsetHeight));
-        newLeft = Math.max(0, Math.min(newLeft, parent.offsetWidth - el.offsetWidth));
-
-        el.style.top = `${newTop}px`;
-        el.style.left = `${newLeft}px`;
+        document.onmouseup = document.ontouchend = () => {
+            document.onmouseup = document.onmousemove = document.ontouchend = document.ontouchmove = null;
+        };
+        
+        document.onmousemove = document.ontouchmove = function(e) {
+            const cx = e.clientX || e.touches[0].clientX;
+            const cy = e.clientY || e.touches[0].clientY;
+            pos1 = pos3 - cx;
+            pos2 = pos4 - cy;
+            pos3 = cx;
+            pos4 = cy;
+            el.style.top = (el.offsetTop - pos2) + "px";
+            el.style.left = (el.offsetLeft - pos1) + "px";
+        };
     };
-
-    const dragEnd = () => {
-        document.onmouseup = document.onmousemove = document.ontouchend = document.ontouchmove = null;
-    };
-
-    el.onmousedown = el.ontouchstart = dragStart;
 }
+
 
 function rotateSig(btn) {
     const el = btn.closest('.draggable-sig');
