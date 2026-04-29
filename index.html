@@ -159,7 +159,6 @@ header {
     border: 1px solid #f1f5f9;
 }
 
-
 .draggable-sig img {
     pointer-events: none; /* A imagem não deve capturar o clique, apenas o container pai */
     user-select: none;
@@ -510,6 +509,7 @@ function replicateSig(btn) {
     });
 }
 
+
 // FUNÇÃO GIRAR MANUAL
 function initAdvancedControls(el) {
     const rotateHandle = el.querySelector('.rotate-handle');
@@ -539,7 +539,6 @@ function initAdvancedControls(el) {
     makeDraggable(el); 
 }
 
-
 // GESTÃO DE EXCLUSÃO (Conforme Print 2)
 
 let targetSig = null;
@@ -548,6 +547,16 @@ function askDelete(btn) {
     targetSig = btn.closest('.draggable-sig');
     document.getElementById('delete-modal').style.display = 'flex';
 }
+
+function executeDelete(mode) {
+    if (mode === 'page') {
+        if (targetSig) targetSig.remove();
+    } else if (mode === 'all') {
+        document.querySelectorAll('.draggable-sig').forEach(s => s.remove());
+    }
+    closeDeleteModal();
+}
+
 
 function executeDelete(mode) {
     if (mode === 'page') {
