@@ -117,20 +117,18 @@
         <span class="text-xl font-bold tracking-tight">AssinaPDF<span class="text-blue-400">já</span></span>
         <button id="save-btn" class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg text-sm font-bold transition disabled:opacity-30" disabled>Salvar e Baixar</button>
     </div>
-    
+
     <div class="flex justify-between items-center bg-[#1e293b] p-2 rounded-lg">
         <div class="flex items-center gap-3">
-            <button onclick="changePage(-1)" class="p-1 hover:bg-slate-700 rounded">◀</button>
-            <span id="page-info" class="text-xs font-mono">Pág: 0 / 0</span>
-            <button onclick="changePage(1)" class="p-1 hover:bg-slate-700 rounded">▶</button>
+            <span id="page-info" class="text-xs font-mono">Documento carregado</span>
         </div>
         <div class="flex gap-4 border-l border-slate-700 pl-4">
+            <span class="text-xs self-center text-slate-400">Zoom:</span>
             <button onclick="changeZoom(-0.2)" class="font-bold text-lg">-</button>
             <button onclick="changeZoom(0.2)" class="font-bold text-lg">+</button>
         </div>
     </div>
 </header>
-
 
     <main class="p-4 max-w-4xl mx-auto space-y-6">
 
@@ -189,21 +187,19 @@ let pdfDoc = null; // Objeto do PDF carregado
 let currentPage = 1;
 let totalPages = 0;
 
-
-// --- Alteração na carga do PDF ---
+// --- Alteração na carga do PDF para Rolagem Vertical ---
 document.getElementById('pdf-input').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     pdfBytes = await file.arrayBuffer();
-    
-    // Carrega o PDF para o PDF.js
+
     const loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
     pdfDoc = await loadingTask.promise;
     totalPages = pdfDoc.numPages;
-    currentPage = 1;
     
-    loadPage(currentPage);
+    renderAllPages(); // Chama a renderização de todas as páginas
 });
+
 
 async function loadPage(num) {
     pdfPage = await pdfDoc.getPage(num);
@@ -225,7 +221,39 @@ function changePage(delta) {
     }
 }
 
-        async function renderPDF() {
+async function renderAllPages() {
+    const wrapper = document.getElementById('pdf-wrapper');
+    wrapper.innerHTML = ''; // Limpa o wrapper
+    document.getElementById('save-btn').disabled = true;
+
+    for (let num = 1; num <= totalPages; num++) {
+        const page = await pdfDoc.getPage(num);
+        const viewport = page.getViewport({ scale: currentScale });
+
+        // Cria um container para cada página (ajuda no posicionamento das assinaturas)
+        const pageContainer = document.createElement('div');
+        pageContainer.className = 'relative mb-4 bg-white shadow-lg page-block';
+        pageContainer.dataset.pageNumber = num; // Guarda o número da página
+        pageContainer.style.width = `${viewport.width}px`;
+        pageContainer.style.height = `${viewport.height}px`;
+
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        canvas.className = 'block';
+
+        pageContainer.appendChild(canvas);
+        wrapper.appendChild(pageContainer);
+
+        await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+    }
+    
+    document.getElementById('save-btn').disabled = false;
+    document.getElementById('page-info').textContent = `${totalPages} páginas carregadas`;
+}   
+
+     async function renderPDF() {
             if (!pdfPage) return;
             const canvas = document.getElementById('pdf-canvas');
             const ctx = canvas.getContext('2d');
@@ -236,15 +264,94 @@ function changePage(delta) {
             document.getElementById('save-btn').disabled = false;
         }
 
-        function changeZoom(delta) {
-            currentScale = Math.min(Math.max(currentScale + delta, 0.5), 3);
-            renderPDF();
-        }
+function changeZoom(delta) {
+    currentScale = Math.min(Math.max(currentScale + delta, 0.5), 3);
+    renderAllPages();
+}
 
-        // --- Fluxo de Assinatura ---
-        const modal = document.getElementById('sig-modal');
-        const sigCanvas = document.getElementById('signature-pad');
-        sigPad = new SignaturePad(sigCanvas);
+// Ajuste na função de criar assinatura para anexar à página visível ou ao wrapper
+function createDraggableSignature(url, x, y) {
+    const div = document.createElement('div');
+    div.className = 'draggable-sig';
+    div.style.width = '150px';
+    div.style.height = '75px';
+    
+    // Calcula a posição baseada no scroll atual para aparecer no centro da tela
+    const scrollY = document.querySelector('.pdf-area').scrollTop;
+    div.style.left = '50px'; 
+    div.style.top = (scrollY + 100) + 'px';
+    
+    div.style.position = 'absolute';
+
+    const img = document.createElement('img');
+    img.src = url;
+    img.style.width = '100%';
+    img.style.height = '100%';
+    img.style.pointerEvents = 'none';
+
+    const controls = document.createElement('div');
+    controls.className = 'sig-controls';
+    controls.innerHTML = `
+        <button onclick="rotateSig(this)">Girar</button>
+        <button onclick="this.parentElement.parentElement.remove()" class="text-red-500">X</button>
+    `;
+
+    div.appendChild(controls);
+    div.appendChild(img);
+
+    document.getElementById('pdf-wrapper').appendChild(div);
+    makeDraggable(div);
+}
+
+// --- Ajuste no Salvar (Mapeamento de Páginas) ---
+document.getElementById('save-btn').addEventListener('click', async () => {
+    const signatures = document.querySelectorAll('.draggable-sig');
+    if (signatures.length === 0) return alert("Adicione ao menos uma assinatura.");
+
+    const pdfDocLib = await PDFDocument.load(pdfBytes);
+    const pages = pdfDocLib.getPages();
+
+    for (const sig of signatures) {
+        const imgData = sig.querySelector('img').src;
+        const sigImg = await pdfDocLib.embedPng(imgData);
+        
+        const sigRect = sig.getBoundingClientRect();
+        
+        // Descobre em qual página o elemento está sobreposto
+        const pageBlocks = document.querySelectorAll('.page-block');
+        let targetPageIdx = 0;
+        let relativeY = 0;
+
+        for (let i = 0; i < pageBlocks.length; i++) {
+            const blockRect = pageBlocks[i].getBoundingClientRect();
+            // Se o topo da assinatura está dentro dos limites verticais deste bloco de página
+            if (sigRect.top >= blockRect.top && sigRect.top <= blockRect.bottom) {
+                targetPageIdx = i;
+                const pageLib = pages[targetPageIdx];
+                const { width, height } = pageLib.getSize();
+                const ratio = width / blockRect.width;
+
+                const x = (sigRect.left - blockRect.left) * ratio;
+                // No PDFLib o Y=0 é no rodapé, invertemos a lógica:
+                const y = height - ((sigRect.top - blockRect.top) * ratio) - (sig.offsetHeight * ratio);
+
+                pageLib.drawImage(sigImg, {
+                    x: x,
+                    y: y,
+                    width: sig.offsetWidth * ratio,
+                    height: sig.offsetHeight * ratio,
+                });
+                break;
+            }
+        }
+    }
+
+    const saved = await pdfDocLib.save();
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([saved], { type: "application/pdf" }));
+    link.download = "assinado.pdf";
+    link.click();
+});
 
         function openSigFlow() {
             modal.style.display = 'flex';
