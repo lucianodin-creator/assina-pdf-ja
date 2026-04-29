@@ -177,222 +177,121 @@
         </div>
     </div>
 
-    <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-        const { PDFDocument } = PDFLib;
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const { PDFDocument } = PDFLib;
 
-        let pdfBytes, pdfPage, sigPad, currentScale = 1.0;
-        let activeSignature = null;
-let pdfDoc = null; // Objeto do PDF carregado
+let pdfBytes, pdfPage, sigPad, currentScale = 1.0;
+let pdfDoc = null;
 let currentPage = 1;
 let totalPages = 0;
 
-// --- Alteração na carga do PDF para Rolagem Vertical ---
+// Objeto para guardar as assinaturas de cada página
+// Estrutura: { 1: [div1, div2], 2: [div3], ... }
+let signaturesByPage = {};
+
+// --- Carregamento do PDF ---
 document.getElementById('pdf-input').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    
+    // Limpa assinaturas anteriores se carregar novo PDF
+    document.querySelectorAll('.draggable-sig').forEach(el => el.remove());
+    signaturesByPage = {};
+    
     pdfBytes = await file.arrayBuffer();
-
     const loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
     pdfDoc = await loadingTask.promise;
     totalPages = pdfDoc.numPages;
-    
-    renderAllPages(); // Chama a renderização de todas as páginas
-});
+    currentPage = 1;
 
+    loadPage(currentPage);
+});
 
 async function loadPage(num) {
     pdfPage = await pdfDoc.getPage(num);
     document.getElementById('page-info').textContent = `Pág: ${num} / ${totalPages}`;
-    renderPDF();
+    
+    // 1. Esconder todas as assinaturas existentes
+    document.querySelectorAll('.draggable-sig').forEach(el => el.style.display = 'none');
+    
+    // 2. Renderizar o PDF
+    await renderPDF();
+    
+    // 3. Mostrar apenas as assinaturas da página atual
+    if (signaturesByPage[num]) {
+        signaturesByPage[num].forEach(sigDiv => {
+            sigDiv.style.display = 'block';
+        });
+    }
 }
 
-// --- Função para trocar de página ---
 function changePage(delta) {
     const newPage = currentPage + delta;
     if (newPage >= 1 && newPage <= totalPages) {
-        // Antes de trocar, removemos as assinaturas da tela anterior 
-        // ou você pode optar por mantê-las se o usuário quiser assinar várias páginas.
-        // Se quiser limpar ao trocar de página, use: 
-        // document.querySelectorAll('.draggable-sig').forEach(el => el.remove());
-        
         currentPage = newPage;
         loadPage(currentPage);
     }
 }
 
-async function renderAllPages() {
-    const wrapper = document.getElementById('pdf-wrapper');
-    wrapper.innerHTML = ''; // Limpa o wrapper
-    document.getElementById('save-btn').disabled = true;
-
-    for (let num = 1; num <= totalPages; num++) {
-        const page = await pdfDoc.getPage(num);
-        const viewport = page.getViewport({ scale: currentScale });
-
-        // Cria um container para cada página (ajuda no posicionamento das assinaturas)
-        const pageContainer = document.createElement('div');
-        pageContainer.className = 'relative mb-4 bg-white shadow-lg page-block';
-        pageContainer.dataset.pageNumber = num; // Guarda o número da página
-        pageContainer.style.width = `${viewport.width}px`;
-        pageContainer.style.height = `${viewport.height}px`;
-
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        canvas.className = 'block';
-
-        pageContainer.appendChild(canvas);
-        wrapper.appendChild(pageContainer);
-
-        await page.render({ canvasContext: ctx, viewport: viewport }).promise;
-    }
-    
+async function renderPDF() {
+    if (!pdfPage) return;
+    const canvas = document.getElementById('pdf-canvas');
+    const ctx = canvas.getContext('2d');
+    const viewport = pdfPage.getViewport({ scale: currentScale });
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await pdfPage.render({ canvasContext: ctx, viewport: viewport }).promise;
     document.getElementById('save-btn').disabled = false;
-    document.getElementById('page-info').textContent = `${totalPages} páginas carregadas`;
-}   
-
-     async function renderPDF() {
-            if (!pdfPage) return;
-            const canvas = document.getElementById('pdf-canvas');
-            const ctx = canvas.getContext('2d');
-            const viewport = pdfPage.getViewport({ scale: currentScale });
-            canvas.width = viewport.width;
-            canvas.height = viewport.height;
-            await pdfPage.render({ canvasContext: ctx, viewport: viewport }).promise;
-            document.getElementById('save-btn').disabled = false;
-        }
+}
 
 function changeZoom(delta) {
     currentScale = Math.min(Math.max(currentScale + delta, 0.5), 3);
-    renderAllPages();
+    renderPDF();
+    // Nota: O zoom idealmente deveria reajustar a posição das assinaturas, 
+    // mas isso requer cálculos complexos de matriz. Para simplicidade, 
+    // o usuário move a assinatura após o zoom.
 }
 
-// Ajuste na função de criar assinatura para anexar à página visível ou ao wrapper
-function createDraggableSignature(url, x, y) {
-    const div = document.createElement('div');
-    div.className = 'draggable-sig';
-    div.style.width = '150px';
-    div.style.height = '75px';
-    
-    // Calcula a posição baseada no scroll atual para aparecer no centro da tela
-    const scrollY = document.querySelector('.pdf-area').scrollTop;
-    div.style.left = '50px'; 
-    div.style.top = (scrollY + 100) + 'px';
-    
-    div.style.position = 'absolute';
+// --- Fluxo de Assinatura ---
+const modal = document.getElementById('sig-modal');
+const sigCanvas = document.getElementById('signature-pad');
+sigPad = new SignaturePad(sigCanvas);
 
-    const img = document.createElement('img');
-    img.src = url;
-    img.style.width = '100%';
-    img.style.height = '100%';
-    img.style.pointerEvents = 'none';
-
-    const controls = document.createElement('div');
-    controls.className = 'sig-controls';
-    controls.innerHTML = `
-        <button onclick="rotateSig(this)">Girar</button>
-        <button onclick="this.parentElement.parentElement.remove()" class="text-red-500">X</button>
-    `;
-
-    div.appendChild(controls);
-    div.appendChild(img);
-
-    document.getElementById('pdf-wrapper').appendChild(div);
-    makeDraggable(div);
+function openSigFlow() {
+    modal.style.display = 'flex';
+    document.getElementById('orientation-msg').classList.remove('hidden');
+    document.getElementById('pad-container').classList.add('hidden');
 }
-
-// --- Ajuste no Salvar (Mapeamento de Páginas) ---
-document.getElementById('save-btn').addEventListener('click', async () => {
-    const signatures = document.querySelectorAll('.draggable-sig');
-    if (signatures.length === 0) return alert("Adicione ao menos uma assinatura.");
-
-    const pdfDocLib = await PDFDocument.load(pdfBytes);
-    const pages = pdfDocLib.getPages();
-
-    for (const sig of signatures) {
-        const imgData = sig.querySelector('img').src;
-        const sigImg = await pdfDocLib.embedPng(imgData);
-        
-        const sigRect = sig.getBoundingClientRect();
-        
-        // Descobre em qual página o elemento está sobreposto
-        const pageBlocks = document.querySelectorAll('.page-block');
-        let targetPageIdx = 0;
-        let relativeY = 0;
-
-        for (let i = 0; i < pageBlocks.length; i++) {
-            const blockRect = pageBlocks[i].getBoundingClientRect();
-            // Se o topo da assinatura está dentro dos limites verticais deste bloco de página
-            if (sigRect.top >= blockRect.top && sigRect.top <= blockRect.bottom) {
-                targetPageIdx = i;
-                const pageLib = pages[targetPageIdx];
-                const { width, height } = pageLib.getSize();
-                const ratio = width / blockRect.width;
-
-                const x = (sigRect.left - blockRect.left) * ratio;
-                // No PDFLib o Y=0 é no rodapé, invertemos a lógica:
-                const y = height - ((sigRect.top - blockRect.top) * ratio) - (sig.offsetHeight * ratio);
-
-                pageLib.drawImage(sigImg, {
-                    x: x,
-                    y: y,
-                    width: sig.offsetWidth * ratio,
-                    height: sig.offsetHeight * ratio,
-                });
-                break;
-            }
-        }
-    }
-
-    const saved = await pdfDocLib.save();
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(new Blob([saved], { type: "application/pdf" }));
-    link.download = "assinado.pdf";
-    link.click();
-});
-
-        function openSigFlow() {
-            modal.style.display = 'flex';
-            document.getElementById('orientation-msg').classList.remove('hidden');
-            document.getElementById('pad-container').classList.add('hidden');
-        }
 
 function showPad() {
-    // 1. Esconde a mensagem de orientação completamente
     document.getElementById('orientation-msg').style.display = 'none';
-    
-    // 2. Mostra o container do pad como flex
     const container = document.getElementById('pad-container');
     container.style.display = 'flex';
     container.classList.remove('hidden');
 
-    // 3. Ajusta o tamanho do canvas ao novo espaço disponível
     setTimeout(() => {
         const ratio = Math.max(window.devicePixelRatio || 1, 1);
-        // Pega a largura e altura exatas que o CSS flex:1 reservou
         sigCanvas.width = sigCanvas.offsetWidth * ratio;
         sigCanvas.height = sigCanvas.offsetHeight * ratio;
         sigCanvas.getContext("2d").scale(ratio, ratio);
         sigPad.clear();
-    }, 150); // Delay leve para o layout assentar
+    }, 150);
 }
 
-        function closeSigModal() { modal.style.display = 'none'; }
+function closeSigModal() { modal.style.display = 'none'; }
 
-        function confirmSignature() {
-            if (sigPad.isEmpty()) return alert("Desenhe sua assinatura!");
-            const dataUrl = sigPad.toDataURL();
-            const canvas = document.getElementById('pdf-canvas');
-            
-            // Centraliza no canvas visível
-            createDraggableSignature(dataUrl, (canvas.width / 2) - 75, (canvas.height / 2) - 37);
-            closeSigModal();
-        }
+function confirmSignature() {
+    if (sigPad.isEmpty()) return alert("Desenhe sua assinatura!");
+    const dataUrl = sigPad.toDataURL();
+    const canvas = document.getElementById('pdf-canvas');
+    
+    // Centraliza no canvas visível
+    createDraggableSignature(dataUrl, (canvas.width / 2) - 75, (canvas.height / 2) - 37);
+    closeSigModal();
+}
 
-        // --- Assinatura Manipulável ---
-
+// --- Assinatura Manipulável (Vinculada à Página) ---
 function createDraggableSignature(url, x, y) {
     const div = document.createElement('div');
     div.className = 'draggable-sig';
@@ -400,7 +299,10 @@ function createDraggableSignature(url, x, y) {
     div.style.height = '75px';
     div.style.left = x + 'px';
     div.style.top = y + 'px';
-    div.style.position = 'absolute'; // Garante que ela se mova com o wrapper
+    div.style.position = 'absolute';
+    
+    // Guarda a qual página esta assinatura pertence
+    div.dataset.page = currentPage;
 
     const img = document.createElement('img');
     img.src = url;
@@ -413,91 +315,175 @@ function createDraggableSignature(url, x, y) {
     controls.innerHTML = `
         <button onclick="rotateSig(this)">Girar</button>
         <button onclick="cloneSig(this)">Clonar</button>
-        <button onclick="this.parentElement.parentElement.remove()" class="text-red-500">X</button>
+        <button onclick="removeSig(this)" class="text-red-500">X</button>
     `;
-
+    
     div.appendChild(controls);
     div.appendChild(img);
-    
-    // ANEXAR AO WRAPPER: Isso faz a assinatura seguir a rolagem da folha
+
     document.getElementById('pdf-wrapper').appendChild(div);
+    
+    // Adiciona ao nosso controle de assinaturas por página
+    if (!signaturesByPage[currentPage]) {
+        signaturesByPage[currentPage] = [];
+    }
+    signaturesByPage[currentPage].push(div);
     
     makeDraggable(div);
 }
 
+function removeSig(btn) {
+    const el = btn.parentElement.parentElement;
+    const page = el.dataset.page;
+    el.remove();
+    
+    // Remove do array de controle
+    if (signaturesByPage[page]) {
+        signaturesByPage[page] = signaturesByPage[page].filter(sig => sig !== el);
+    }
+}
 
-        function makeDraggable(el) {
-            let p1 = 0, p2 = 0, p3 = 0, p4 = 0;
-            const start = (e) => {
-                p3 = e.clientX || e.touches[0].clientX;
-                p4 = e.clientY || e.touches[0].clientY;
-                document.onmouseup = document.ontouchend = end;
-                document.onmousemove = document.ontouchmove = move;
-            };
-            const move = (e) => {
-                const cx = e.clientX || e.touches[0].clientX;
-                const cy = e.clientY || e.touches[0].clientY;
-                p1 = p3 - cx; p2 = p4 - cy; p3 = cx; p4 = cy;
-                el.style.top = (el.offsetTop - p2) + "px";
-                el.style.left = (el.offsetLeft - p1) + "px";
-            };
-            const end = () => { document.onmouseup = document.onmousemove = document.ontouchend = document.ontouchmove = null; };
-            el.onmousedown = el.ontouchstart = start;
+function makeDraggable(el) {
+    let p1 = 0, p2 = 0, p3 = 0, p4 = 0;
+    
+    const start = (e) => {
+        // Impede scroll da página ao arrastar no mobile
+        if (e.type === 'touchstart') {
+            // e.preventDefault(); // Pode causar problemas em alguns navegadores, teste com cuidado
         }
+        p3 = e.clientX || e.touches[0].clientX;
+        p4 = e.clientY || e.touches[0].clientY;
+        document.onmouseup = document.ontouchend = end;
+        document.onmousemove = document.ontouchmove = move;
+    };
+    
+    const move = (e) => {
+        const cx = e.clientX || e.touches[0].clientX;
+        const cy = e.clientY || e.touches[0].clientY;
+        p1 = p3 - cx;
+        p2 = p4 - cy;
+        p3 = cx;
+        p4 = cy;
+        
+        // Contenção básica para não sair do canvas (opcional)
+        const wrapper = document.getElementById('pdf-wrapper');
+        let newTop = el.offsetTop - p2;
+        let newLeft = el.offsetLeft - p1;
+        
+        // Limites (ajuste 20px de margem das ferramentas)
+        newTop = Math.max(-20, Math.min(newTop, wrapper.offsetHeight - el.offsetHeight + 20));
+        newLeft = Math.max(-20, Math.min(newLeft, wrapper.offsetWidth - el.offsetWidth + 20));
 
-        function rotateSig(btn) {
-            const el = btn.parentElement.parentElement;
-            const curr = el.style.transform.replace(/[^\d.]/g, '') || 0;
-            el.style.transform = `rotate(${(parseInt(curr) + 90) % 360}deg)`;
-        }
+        el.style.top = newTop + "px";
+        el.style.left = newLeft + "px";
+    };
+    
+    const end = () => {
+        document.onmouseup = document.onmousemove = document.ontouchend = document.ontouchmove = null;
+    };
+    
+    el.onmousedown = el.ontouchstart = start;
+}
+
+function rotateSig(btn) {
+    const el = btn.parentElement.parentElement;
+    // Pega a rotação atual ou define 0
+    let curr = el.dataset.rotation ? parseInt(el.dataset.rotation) : 0;
+    curr = (curr + 90) % 360;
+    el.dataset.rotation = curr; // Salva a rotação pura
+    el.style.transform = `rotate(${curr}deg)`;
+}
 
 function cloneSig(btn) {
     const el = btn.parentElement.parentElement;
     const imgData = el.querySelector('img').src;
     
-    // Pega a posição exata da assinatura atual
-    const currentTop = el.style.top;
-    const currentLeft = el.style.left;
-
-    // Cria a nova assinatura na mesma posição
-    // Se o usuário mudar de página, ela já estará posicionada no local correto do wrapper
-    createDraggableSignature(imgData, parseInt(currentLeft), parseInt(currentTop));
+    // Cria um pequeno deslocamento para notar o clone
+    const currentTop = parseInt(el.style.top);
+    const currentLeft = parseInt(el.style.left);
     
-    alert("Assinatura clonada na mesma posição!");
+    createDraggableSignature(imgData, currentLeft + 20, currentTop + 20);
 }
 
+// --- Salvar (Lógica para Múltiplas Páginas) ---
+document.getElementById('save-btn').addEventListener('click', async () => {
+    // Pega TODAS as assinaturas, independente da página que está visível
+    const allSignatures = document.querySelectorAll('.draggable-sig');
+    if (allSignatures.length === 0) return alert("Adicione ao menos uma assinatura.");
+    
+    // Mostra feedback visual de carregamento
+    const btn = document.getElementById('save-btn');
+    const originalText = btn.textContent;
+    btn.textContent = "Processando...";
+    btn.disabled = true;
 
-        // --- Salvar ---
-        document.getElementById('save-btn').addEventListener('click', async () => {
-            const signatures = document.querySelectorAll('.draggable-sig');
-            if (signatures.length === 0) return alert("Adicione ao menos uma assinatura.");
+    try {
+        const pdfDocLib = await PDFDocument.load(pdfBytes);
+        const pages = pdfDocLib.getPages();
+        const canvas = document.getElementById('pdf-canvas');
+        
+        // É crucial usar o viewport original da página (scale 1) para o cálculo 
+        // de proporção no salvamento, independente do zoom da tela.
+        // Como o PDF.js carrega assincronamente, vamos iterar sobre as páginas do PDFLib
+        
+        for (const sig of allSignatures) {
+            const pageNum = parseInt(sig.dataset.page);
+            const sigImgData = sig.querySelector('img').src;
+            const rotation = sig.dataset.rotation ? parseInt(sig.dataset.rotation) : 0;
+            
+            // O PDFLib usa índice 0, páginas são índice 1
+            const pageIdx = pageNum - 1;
+            if (pageIdx < 0 || pageIdx >= pages.length) continue;
+            
+            const pageLib = pages[pageIdx];
+            const { width, height } = pageLib.getSize(); // Tamanho real da página PDF
+            
+            // Para calcular a posição correta, precisamos saber a proporção
+            // entre o canvas que estava na tela quando a assinatura foi colocada
+            // e o tamanho real da página do PDF.
+            
+            // Pegamos o viewport da página na escala 1:1 do PDF.js para ter a referência base
+            const originalPagejs = await pdfDoc.getPage(pageNum);
+            const originalViewport = originalPagejs.getViewport({ scale: 1.0 });
+            
+            // A proporção é baseada na escala atual da tela
+            // Se a tela está com scale 1.5, o ratio é width / (original.width * 1.5)
+            const ratio = width / (originalViewport.width * currentScale);
 
-            const pdfDoc = await PDFDocument.load(pdfBytes);
-            const page = pdfDoc.getPages()[0];
-            const { width, height } = page.getSize();
-            const canvas = document.getElementById('pdf-canvas');
-            const ratio = width / canvas.width;
+            const sigImg = await pdfDocLib.embedPng(sigImgData);
+            
+            // Posição na tela (relativa ao wrapper)
+            const screenX = parseInt(sig.style.left);
+            const screenY = parseInt(sig.style.top);
+            
+            // Convertendo para coordenadas do PDF (Y invertido)
+            const pdfX = screenX * ratio;
+            const pdfY = height - (screenY * ratio) - (sig.offsetHeight * ratio);
 
-            for (const sig of signatures) {
-                const imgData = sig.querySelector('img').src;
-                const sigImg = await pdfDoc.embedPng(imgData);
-                const rect = sig.getBoundingClientRect();
-                const crect = canvas.getBoundingClientRect();
-                
-                page.drawImage(sigImg, {
-                    x: (rect.left - crect.left) * ratio,
-                    y: height - ((rect.top - crect.top) * ratio) - (sig.offsetHeight * ratio),
-                    width: sig.offsetWidth * ratio,
-                    height: sig.offsetHeight * ratio,
-                });
-            }
+            pageLib.drawImage(sigImg, {
+                x: pdfX,
+                y: pdfY,
+                width: sig.offsetWidth * ratio,
+                height: sig.offsetHeight * ratio,
+                rotate: PDFLib.degrees(-rotation), // PDFLib rotaciona anti-horário
+            });
+        }
 
-            const saved = await pdfDoc.save();
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(new Blob([saved], { type: "application/pdf" }));
-            link.download = "assinado.pdf";
-            link.click();
-        });
-    </script>
+        const saved = await pdfDocLib.save();
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(new Blob([saved], { type: "application/pdf" }));
+        link.download = "documento_assinado.pdf";
+        link.click();
+        
+    } catch (error) {
+        console.error(error);
+        alert("Ocorreu um erro ao salvar o PDF.");
+    } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
+    }
+});
+
+</script>
 </body>
 </html>
