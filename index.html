@@ -158,15 +158,18 @@ header {
     border-bottom: 1px solid #eee;
 }
 
+/* Esconde o rodapé do modal por padrão */
 .modal-footer {
-    display: flex;
+    display: none !important; /* Força o desaparecimento inicial */
     gap: 10px;
     padding: 10px 15px;
     background: white;
-    /* Garante que os botões tenham um tamanho fixo e não encolham */
-    flex-shrink: 0; 
-    /* Adiciona margem de segurança para iPhones/Androids novos */
-    padding-bottom: max(10px, env(safe-area-inset-bottom)); 
+    flex-shrink: 0;
+}
+
+/* Classe que será adicionada via JS para mostrar os botões */
+.modal-footer.show {
+    display: flex !important;
 }
 
 /* O botão de assinar fica fixo na base */
@@ -313,37 +316,45 @@ function openSigFlow() {
 }
 
 function showPad() {
+    // 1. Esconde a mensagem de orientação
     document.getElementById('orientation-msg').style.display = 'none';
+    
+    // 2. Mostra o container do canvas
     const container = document.getElementById('pad-container');
     container.style.display = 'flex';
     container.classList.remove('hidden');
 
-    // Pequeno delay para garantir que o navegador calculou o layout flex
+    // 3. MOSTRA OS BOTÕES (Confirmar, Limpar, Cancelar)
+    const footer = document.querySelector('.modal-footer');
+    if (footer) {
+        footer.classList.add('show');
+    }
+
+    // Ajuste de resolução do Canvas
     setTimeout(() => {
         const ratio = Math.max(window.devicePixelRatio || 1, 1);
-        
-        // Ajusta a resolução interna do canvas para o tamanho que ele 
-        // realmente está ocupando na tela após o flexbox agir
         sigCanvas.width = sigCanvas.offsetWidth * ratio;
         sigCanvas.height = sigCanvas.offsetHeight * ratio;
         sigCanvas.getContext("2d").scale(ratio, ratio);
-        
-        sigPad.clear(); // Limpa para evitar distorções após o resize
+        sigPad.clear();
     }, 200);
 }
 
-// Opcional: Reajustar se o usuário virar a tela com o modal aberto
-window.addEventListener("resize", () => {
-    if (document.getElementById('sig-modal').style.display === 'flex') {
-        showPad();
-    }
-});
-
 function closeSigModal() {
     document.getElementById('sig-modal').style.display = 'none';
-    // Devolve a rolagem
-    document.querySelector('.content-area').style.overflowY = 'auto';
+    
+    // Esconde os botões novamente para a próxima vez
+    const footer = document.querySelector('.modal-footer');
+    if (footer) {
+        footer.classList.remove('show');
+    }
+    
+    // Devolve a rolagem da página (se aplicável)
+    if (document.querySelector('.content-area')) {
+        document.querySelector('.content-area').style.overflowY = 'auto';
+    }
 }
+
 
 function confirmSignature() {
     if (sigPad.isEmpty()) return alert("Desenhe sua assinatura!");
