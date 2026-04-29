@@ -16,6 +16,18 @@
         /* Estilo da Barra Superior */
         header { z-index: 50; position: sticky; top: 0; }
 
+/* Seleciona os botões de zoom baseando-se no layout atual */
+.flex.gap-2 button {
+    background-color: #2563eb !important; /* Azul do Tailwind blue-600 */
+    color: white !important;
+    transition: background-color 0.2s;
+}
+
+.flex.gap-2 button:hover {
+    background-color: #1d4ed8 !important; /* Azul um pouco mais escuro para o hover */
+}
+
+
 /* Remove a rolagem da página inteira */
 html, body {
     height: 100%;
@@ -182,10 +194,11 @@ header {
         <section class="bg-white p-4 rounded-xl shadow-sm mb-6 border border-slate-100">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="font-bold text-slate-700">1. Selecione o Documento</h2>
-                <div class="flex gap-2">
-                    <button onclick="changeZoom(-0.2)" class="bg-slate-200 w-8 h-8 rounded-full font-bold">-</button>
-                    <button onclick="changeZoom(0.2)" class="bg-slate-200 w-8 h-8 rounded-full font-bold">+</button>
-                </div>
+<div class="flex gap-2">
+    <button onclick="changeZoom(-0.2)" class="bg-blue-600 hover:bg-blue-700 text-white w-8 h-8 rounded-full shadow font-bold transition-colors">-</button>    
+    <button onclick="changeZoom(0.2)" class="bg-blue-600 hover:bg-blue-700 text-white w-8 h-8 rounded-full shadow font-bold transition-colors">+</button>
+</div>
+
             </div>
             <input type="file" id="pdf-input" accept="application/pdf" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-blue-50 file:text-blue-700"/>
         </section>
@@ -196,10 +209,9 @@ header {
 
 <footer class="footer-actions">
     <div class="max-w-4xl mx-auto">
-        <button onclick="openSigFlow()" class="w-full bg-[#0f172a] text-white py-4 rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-transform">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-            Assinar agora
-        </button>
+<button onclick="openSigFlow()" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-bold shadow-lg ...">
+    Assinar agora
+</button>
     </div>
 </footer>
 
