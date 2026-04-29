@@ -117,17 +117,6 @@
         <span class="text-xl font-bold tracking-tight">AssinaPDF<span class="text-blue-400">já</span></span>
         <button id="save-btn" class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg text-sm font-bold transition disabled:opacity-30" disabled>Salvar e Baixar</button>
     </div>
-
-    <div class="flex justify-between items-center bg-[#1e293b] p-2 rounded-lg">
-        <div class="flex items-center gap-3">
-            <span id="page-info" class="text-xs font-mono">Documento carregado</span>
-        </div>
-        <div class="flex gap-4 border-l border-slate-700 pl-4">
-            <span class="text-xs self-center text-slate-400">Zoom:</span>
-            <button onclick="changeZoom(-0.2)" class="font-bold text-lg">-</button>
-            <button onclick="changeZoom(0.2)" class="font-bold text-lg">+</button>
-        </div>
-    </div>
 </header>
 
     <main class="p-4 max-w-4xl mx-auto space-y-6">
@@ -210,14 +199,13 @@ document.getElementById('pdf-input').addEventListener('change', async (e) => {
 
 async function loadPage(num) {
     pdfPage = await pdfDoc.getPage(num);
-    document.getElementById('page-info').textContent = `Pág: ${num} / ${totalPages}`;
     
     // 1. Esconder todas as assinaturas existentes
     document.querySelectorAll('.draggable-sig').forEach(el => el.style.display = 'none');
-    
+
     // 2. Renderizar o PDF
     await renderPDF();
-    
+
     // 3. Mostrar apenas as assinaturas da página atual
     if (signaturesByPage[num]) {
         signaturesByPage[num].forEach(sigDiv => {
