@@ -27,20 +27,18 @@
     padding: 10px; /* Pequeno espaçamento para não colar na borda */
 }
 
-        #pdf-wrapper {
-            position: relative;
-            display: inline-block;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-        }
+#pdf-wrapper {
+    position: relative; /* Essencial para as assinaturas seguirem a folha */
+    display: inline-block;
+}
 
-pdf-area {
+.pdf-area {
     width: 100%;
-    background: #ffffff; /* MUDANÇA: Fundo totalmente branco */
-    padding: 20px 0;
+    background: #ffffff; /* Fundo branco conforme solicitado */
     display: flex;
     justify-content: center;
-    min-height: 400px;
-    overflow: auto;
+    padding: 20px 0;
+    overflow-y: auto; /* Permite rolagem */
 }
 
 #pdf-canvas { 
@@ -287,34 +285,39 @@ function showPad() {
         }
 
         // --- Assinatura Manipulável ---
-        function createDraggableSignature(url, x, y) {
-            const div = document.createElement('div');
-            div.className = 'draggable-sig';
-            div.style.width = '150px';
-            div.style.height = '75px';
-            div.style.left = x + 'px';
-            div.style.top = y + 'px';
 
-            const img = document.createElement('img');
-            img.src = url;
-            img.style.width = '100%';
-            img.style.height = '100%';
-            img.style.pointerEvents = 'none';
+function createDraggableSignature(url, x, y) {
+    const div = document.createElement('div');
+    div.className = 'draggable-sig';
+    div.style.width = '150px';
+    div.style.height = '75px';
+    div.style.left = x + 'px';
+    div.style.top = y + 'px';
+    div.style.position = 'absolute'; // Garante que ela se mova com o wrapper
 
-            const controls = document.createElement('div');
-            controls.className = 'sig-controls';
-            controls.innerHTML = `
-                <button onclick="rotateSig(this)">Girar</button>
-                <button onclick="cloneSig(this)">Clonar</button>
-                <button onclick="this.parentElement.parentElement.remove()" class="text-red-500">X</button>
-            `;
+    const img = document.createElement('img');
+    img.src = url;
+    img.style.width = '100%';
+    img.style.height = '100%';
+    img.style.pointerEvents = 'none';
 
-            div.appendChild(controls);
-            div.appendChild(img);
-            document.getElementById('pdf-wrapper').appendChild(div);
-            makeDraggable(div);
-            activeSignature = div;
-        }
+    const controls = document.createElement('div');
+    controls.className = 'sig-controls';
+    controls.innerHTML = `
+        <button onclick="rotateSig(this)">Girar</button>
+        <button onclick="cloneSig(this)">Clonar</button>
+        <button onclick="this.parentElement.parentElement.remove()" class="text-red-500">X</button>
+    `;
+
+    div.appendChild(controls);
+    div.appendChild(img);
+    
+    // ANEXAR AO WRAPPER: Isso faz a assinatura seguir a rolagem da folha
+    document.getElementById('pdf-wrapper').appendChild(div);
+    
+    makeDraggable(div);
+}
+
 
         function makeDraggable(el) {
             let p1 = 0, p2 = 0, p3 = 0, p4 = 0;
@@ -341,10 +344,21 @@ function showPad() {
             el.style.transform = `rotate(${(parseInt(curr) + 90) % 360}deg)`;
         }
 
-        function cloneSig(btn) {
-            const el = btn.parentElement.parentElement;
-            createDraggableSignature(el.querySelector('img').src, el.offsetLeft + 20, el.offsetTop + 20);
-        }
+function cloneSig(btn) {
+    const el = btn.parentElement.parentElement;
+    const imgData = el.querySelector('img').src;
+    
+    // Pega a posição exata da assinatura atual
+    const currentTop = el.style.top;
+    const currentLeft = el.style.left;
+
+    // Cria a nova assinatura na mesma posição
+    // Se o usuário mudar de página, ela já estará posicionada no local correto do wrapper
+    createDraggableSignature(imgData, parseInt(currentLeft), parseInt(currentTop));
+    
+    alert("Assinatura clonada na mesma posição!");
+}
+
 
         // --- Salvar ---
         document.getElementById('save-btn').addEventListener('click', async () => {
