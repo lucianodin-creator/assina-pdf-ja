@@ -589,10 +589,27 @@ function initAdvancedControls(el) {
 
 let targetSig = null;
 
+let signatureToConfirm = null;
+
 function askDelete(btn) {
-    targetSig = btn.closest('.draggable-sig');
+    signatureToConfirm = btn.closest('.draggable-sig');
     document.getElementById('delete-modal').style.display = 'flex';
 }
+
+function closeDeleteModal() {
+    document.getElementById('delete-modal').style.display = 'none';
+    signatureToConfirm = null;
+}
+
+function executeDelete(mode) {
+    if (mode === 'page') {
+        if (signatureToConfirm) signatureToConfirm.remove();
+    } else if (mode === 'all') {
+        document.querySelectorAll('.draggable-sig').forEach(sig => sig.remove());
+    }
+    closeDeleteModal();
+}
+
 
 function executeDelete(mode) {
     if (mode === 'page') {
