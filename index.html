@@ -90,33 +90,39 @@
     background: white;
     z-index: 100;
     flex-direction: column;
-    height: 100dvh; /* Altura dinâmica para mobile */
+    /* Usa a altura dinâmica para considerar barras do navegador */
+    height: 100dvh; 
     width: 100vw;
-    overflow: hidden; /* Impede qualquer rolagem */
+    overflow: hidden;
 }
 
 #pad-container {
     flex: 1;
-    display: none; /* Começa escondido */
+    display: flex;
     flex-direction: column;
     height: 100%;
+    width: 100%;
+    /* Evita que o conteúdo empurre os botões para fora */
+    overflow: hidden; 
 }
 
-
 #signature-pad {
-    flex: 1; /* Ocupa todo o espaço entre o topo e os botões */
+    flex: 1; /* Ocupa todo o espaço central disponível */
     width: 100%;
     touch-action: none;
-    background: #fafafa;
+    background: #fdfdfd;
+    border-bottom: 1px solid #eee;
 }
 
 .modal-footer {
     display: flex;
     gap: 10px;
-    padding: 15px;
+    padding: 10px 15px;
     background: white;
-    border-top: 1px solid #eee;
-    padding-bottom: env(safe-area-inset-bottom); /* Suporte para iPhone/Android modernos */
+    /* Garante que os botões tenham um tamanho fixo e não encolham */
+    flex-shrink: 0; 
+    /* Adiciona margem de segurança para iPhones/Androids novos */
+    padding-bottom: max(10px, env(safe-area-inset-bottom)); 
 }
 
     </style>
@@ -258,15 +264,27 @@ function showPad() {
     container.style.display = 'flex';
     container.classList.remove('hidden');
 
-    // Ajuste de resolução do Canvas de assinatura
+    // Pequeno delay para garantir que o navegador calculou o layout flex
     setTimeout(() => {
         const ratio = Math.max(window.devicePixelRatio || 1, 1);
+        
+        // Ajusta a resolução interna do canvas para o tamanho que ele 
+        // realmente está ocupando na tela após o flexbox agir
         sigCanvas.width = sigCanvas.offsetWidth * ratio;
         sigCanvas.height = sigCanvas.offsetHeight * ratio;
         sigCanvas.getContext("2d").scale(ratio, ratio);
-        sigPad.clear();
-    }, 150);
+        
+        sigPad.clear(); // Limpa para evitar distorções após o resize
+    }, 200);
 }
+
+// Opcional: Reajustar se o usuário virar a tela com o modal aberto
+window.addEventListener("resize", () => {
+    if (document.getElementById('sig-modal').style.display === 'flex') {
+        showPad();
+    }
+});
+
 
 function closeSigModal() { 
     document.getElementById('sig-modal').style.display = 'none'; 
